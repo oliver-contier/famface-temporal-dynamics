@@ -135,7 +135,7 @@ def create_reg_workflow(name='registration'):
     Estimate the tissue classes from the anatomical image. But use spm's segment
     as FSL appears to be breaking.
     """
-
+    # TODO: this node crashes: Error: input image .../highres001 not valid.
     stripper = pe.Node(fsl.BET(frac=0.1), name='stripper')
     register.connect(inputnode, 'anatomical_image', stripper, 'in_file')
     fast = pe.Node(fsl.FAST(), name='fast')
@@ -739,7 +739,8 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     Return data components as anat, bold and behav
     """
 
-    contrast_file = os.path.join(data_dir, 'models', 'model%03d' % model_id,
+    # TODO: changed dir here too in order to get all the contrasts
+    contrast_file = os.path.join(data_dir, 'data', 'models', 'model%03d' % model_id,
                                  'task_contrasts.txt')
 
     has_contrast = os.path.exists(contrast_file)
@@ -970,6 +971,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
         if target:
             registration.inputs.inputspec.target_image = target
     else:
+        # TODO: maybe this one?
         wf.connect(datasource, 'anat', registration, 'inputspec.anatomical_image')
         registration.inputs.inputspec.target_image = fsl.Info.standard_image('MNI152_T1_2mm.nii.gz')
         registration.inputs.inputspec.target_image_brain = fsl.Info.standard_image('MNI152_T1_2mm_brain.nii.gz')
@@ -996,6 +998,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                   ('varcopes', 'varcopes'),
                   ('zstats', 'zstats'),
                   ])])
+    # TODO: maybe this one?
     wf.connect(mergefunc, 'out_files', registration, 'inputspec.source_files')
 
     def split_files(in_files, splits):
