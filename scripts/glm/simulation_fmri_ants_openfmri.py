@@ -62,6 +62,9 @@ imports = ['import os',
            ]
 
 
+def flatten_list(in1):
+    return sum(in1, [])
+
 def median(in_files):
     """Computes an average of the median of each realigned timeseries
 
@@ -267,14 +270,24 @@ def create_reg_workflow(name='registration'):
     warpall = pe.MapNode(ants.ApplyTransforms(),
                          iterfield=['input_image'],
                          name='warpall')
-    #warpall.inputs.input_image_type = 0
-    warpall.inputs.input_image_type = 1
+
+    warpall.inputs.input_image_type = 3
     warpall.inputs.interpolation = 'Linear'
     warpall.inputs.invert_transform_flags = [False, False]
     warpall.inputs.terminal_output = 'file'
 
+    """
+    Since now we have a list of lists (flameo0/cope1 kinda) we need to flatten them
+    into a list before we pass it into warpall
+
+    """
+    flattennode = Function(input_names=['in1'], output_names=['out'], function=flatten_list)
+
+    flattencopes = pe.Node(flattennode, name="flattencopes")
+
     register.connect(inputnode, 'target_image_brain', warpall, 'reference_image')
-    register.connect(inputnode, 'source_files', warpall, 'input_image')
+    register.connect(inputnode, 'source_files', flattencopes, 'in1')
+    register.connect(flattencopes, 'out', warpall, 'input_image')
     register.connect(merge, 'out', warpall, 'transforms')
 
     """
@@ -374,221 +387,230 @@ def get_aparc_aseg(files):
     raise ValueError('aparc+aseg.mgz not found')
 
 
-def create_fs_reg_workflow(name='registration'):
-    """Create a FEAT preprocessing workflow together with freesurfer
-
-    Parameters
-    ----------
-        name: name of workflow (default: 'registration')
-
-    Inputs:
-        inputspec.source_files : files (filename or list of filenames to register)
-        inputspec.mean_image : reference image to use
-        inputspec.target_image : registration target
-
-    Outputs:
-        outputspec.func2anat_transform : FLIRT transform
-        outputspec.anat2target_transform : FLIRT+FNIRT transform
-        outputspec.transformed_files : transformed files in target space
-        outputspec.transformed_mean : mean image in target space
-    """
-
-    register = Workflow(name=name)
-
-    # TODO: source_files are passed to warpall, which is complaining about receiving list
-    # instead of existing file name.
-    inputnode = Node(interface=IdentityInterface(fields=['source_files',
-                                                         'mean_image',
-                                                         'subject_id',
-                                                         'subjects_dir',
-                                                         'target_image']),
-                     name='inputspec')
-
-    outputnode = Node(interface=IdentityInterface(fields=['func2anat_transform',
-                                                          'out_reg_file',
-                                                          'anat2target_transform',
-                                                          'transforms',
-                                                          'transformed_mean',
-                                                          'transformed_files',
-                                                          'min_cost_file',
-                                                          'anat2target',
-                                                          'aparc',
-                                                          'mean2anat_mask'
-                                                          ]),
-                      name='outputspec')
-
-    # Get the subject's freesurfer source directory
-    fssource = Node(FreeSurferSource(),
-                    name='fssource')
-    fssource.run_without_submitting = True
-    register.connect(inputnode, 'subject_id', fssource, 'subject_id')
-    register.connect(inputnode, 'subjects_dir', fssource, 'subjects_dir')
-
-    convert = Node(freesurfer.MRIConvert(out_type='nii'),
-                   name="convert")
-    register.connect(fssource, 'T1', convert, 'in_file')
-
-    # Coregister the median to the surface
-    bbregister = Node(freesurfer.BBRegister(registered_file=True),
-                      name='bbregister')
-    bbregister.inputs.init = 'fsl'
-    bbregister.inputs.contrast_type = 't2'
-    bbregister.inputs.out_fsl_file = True
-    bbregister.inputs.epi_mask = True
-    register.connect(inputnode, 'subject_id', bbregister, 'subject_id')
-    register.connect(inputnode, 'mean_image', bbregister, 'source_file')
-    register.connect(inputnode, 'subjects_dir', bbregister, 'subjects_dir')
-
-    # Create a mask of the median coregistered to the anatomical image
-    mean2anat_mask = Node(fsl.BET(mask=True), name='mean2anat_mask')
-    register.connect(bbregister, 'registered_file', mean2anat_mask, 'in_file')
-
-    """
-    use aparc+aseg's brain mask
-    """
-
-    binarize = Node(fs.Binarize(min=0.5, out_type="nii.gz", dilate=1), name="binarize_aparc")
-    register.connect(fssource, ("aparc_aseg", get_aparc_aseg), binarize, "in_file")
-
-    stripper = Node(fsl.ApplyMask(), name='stripper')
-    register.connect(binarize, "binary_file", stripper, "mask_file")
-    register.connect(convert, 'out_file', stripper, 'in_file')
-
-    """
-    Apply inverse transform to aparc file
-    """
-
-    aparcxfm = Node(freesurfer.ApplyVolTransform(inverse=True,
-                                                 interp='nearest'),
-                    name='aparc_inverse_transform')
-    register.connect(inputnode, 'subjects_dir', aparcxfm, 'subjects_dir')
-    register.connect(bbregister, 'out_reg_file', aparcxfm, 'reg_file')
-    register.connect(fssource, ('aparc_aseg', get_aparc_aseg),
-                     aparcxfm, 'target_file')
-    register.connect(inputnode, 'mean_image', aparcxfm, 'source_file')
-
-    """
-    Convert the BBRegister transformation to ANTS ITK format
-    """
-
-    convert2itk = Node(C3dAffineTool(), name='convert2itk')
-    convert2itk.inputs.fsl2ras = True
-    convert2itk.inputs.itk_transform = True
-    register.connect(bbregister, 'out_fsl_file', convert2itk, 'transform_file')
-    register.connect(inputnode, 'mean_image', convert2itk, 'source_file')
-    register.connect(stripper, 'out_file', convert2itk, 'reference_file')
-
-    """
-    Compute registration between the subject's structural and MNI template
-    This is currently set to perform a very quick registration. However, the
-    registration can be made significantly more accurate for cortical
-    structures by increasing the number of iterations
-    All parameters are set using the example from:
-    #https://github.com/stnava/ANTs/blob/master/Scripts/newAntsExample.sh
-    """
-
-    reg = Node(ants.Registration(), name='antsRegister')
-    reg.inputs.output_transform_prefix = "output_"
-    reg.inputs.transforms = ['Rigid', 'Affine', 'SyN']
-    reg.inputs.transform_parameters = [(0.1,), (0.1,), (0.2, 3.0, 0.0)]
-    reg.inputs.number_of_iterations = [[10000, 11110, 11110]] * 2 + [[100, 30, 20]]
-    reg.inputs.dimension = 3
-    reg.inputs.write_composite_transform = True
-    reg.inputs.collapse_output_transforms = True
-    reg.inputs.initial_moving_transform_com = True
-    reg.inputs.metric = ['Mattes'] * 2 + [['Mattes', 'CC']]
-    reg.inputs.metric_weight = [1] * 2 + [[0.5, 0.5]]
-    reg.inputs.radius_or_number_of_bins = [32] * 2 + [[32, 4]]
-    reg.inputs.sampling_strategy = ['Regular'] * 2 + [[None, None]]
-    reg.inputs.sampling_percentage = [0.3] * 2 + [[None, None]]
-    reg.inputs.convergence_threshold = [1.e-8] * 2 + [-0.01]
-    reg.inputs.convergence_window_size = [20] * 2 + [5]
-    reg.inputs.smoothing_sigmas = [[4, 2, 1]] * 2 + [[1, 0.5, 0]]
-    reg.inputs.sigma_units = ['vox'] * 3
-    reg.inputs.shrink_factors = [[3, 2, 1]] * 2 + [[4, 2, 1]]
-    reg.inputs.use_estimate_learning_rate_once = [True] * 3
-    reg.inputs.use_histogram_matching = [False] * 2 + [True]
-    reg.inputs.winsorize_lower_quantile = 0.005
-    reg.inputs.winsorize_upper_quantile = 0.995
-    reg.inputs.float = True
-    reg.inputs.output_warped_image = 'output_warped_image.nii.gz'
-    reg.inputs.num_threads = 4
-    reg.plugin_args = {'qsub_args': '-pe orte 4',
-                       'sbatch_args': '--mem=6G -c 4'}
-    register.connect(stripper, 'out_file', reg, 'moving_image')
-    register.connect(inputnode, 'target_image', reg, 'fixed_image')
-
-    """
-    Concatenate the affine and ants transforms into a list
-    """
-
-    pickfirst = lambda x: x[0]
-
-    merge = Node(Merge(2), iterfield=['in2'], name='mergexfm')
-    register.connect(convert2itk, 'itk_transform', merge, 'in2')
-    register.connect(reg, 'composite_transform', merge, 'in1')
-
-    """
-    Transform the mean image. First to anatomical and then to target
-    """
-
-    warpmean = Node(ants.ApplyTransforms(), name='warpmean')
-    warpmean.inputs.input_image_type = 0
-    warpmean.inputs.interpolation = 'Linear'
-    warpmean.inputs.invert_transform_flags = [False, False]
-    warpmean.inputs.terminal_output = 'file'
-    warpmean.inputs.args = '--float'
-
-    """
-    Transform the remaining images. First to anatomical and then to target
-    """
-    # TODO: ValueError: Input should be str (filename of contrast) not list.
-    # But it is a MapNode already!?
-    warpall = MapNode(ants.ApplyTransforms(),
-                      iterfield=['input_image'],
-                      name='warpall')
-    warpall.inputs.input_image_type = 0
-    warpall.inputs.interpolation = 'Linear'
-    warpall.inputs.invert_transform_flags = [False, False]
-    warpall.inputs.terminal_output = 'file'
-    warpall.inputs.args = '--float'
-    warpall.inputs.num_threads = 2
-    warpall.plugin_args = {'sbatch_args': '--mem=6G -c 2'}
-
-    """
-    Assign all the output files
-    """
-
-    register.connect(warpmean, 'output_image', outputnode, 'transformed_mean')
-    register.connect(warpall, 'output_image', outputnode, 'transformed_files')
-
-    register.connect(inputnode, 'target_image', warpmean, 'reference_image')
-    register.connect(inputnode, 'mean_image', warpmean, 'input_image')
-    register.connect(merge, 'out', warpmean, 'transforms')
-    register.connect(inputnode, 'target_image', warpall, 'reference_image')
-    register.connect(inputnode, 'source_files', warpall, 'input_image')
-    register.connect(merge, 'out', warpall, 'transforms')
-
-    """
-    Assign all the output files
-    """
-
-    register.connect(reg, 'warped_image', outputnode, 'anat2target')
-    register.connect(aparcxfm, 'transformed_file',
-                     outputnode, 'aparc')
-    register.connect(bbregister, 'out_fsl_file',
-                     outputnode, 'func2anat_transform')
-    register.connect(bbregister, 'out_reg_file',
-                     outputnode, 'out_reg_file')
-    register.connect(bbregister, 'min_cost_file',
-                     outputnode, 'min_cost_file')
-    register.connect(mean2anat_mask, 'mask_file',
-                     outputnode, 'mean2anat_mask')
-    register.connect(reg, 'composite_transform',
-                     outputnode, 'anat2target_transform')
-    register.connect(merge, 'out', outputnode, 'transforms')
-
-    return register
+# def create_fs_reg_workflow(name='registration'):
+#     """Create a FEAT preprocessing workflow together with freesurfer
+#
+#     Parameters
+#     ----------
+#         name: name of workflow (default: 'registration')
+#
+#     Inputs:
+#         inputspec.source_files : files (filename or list of filenames to register)
+#         inputspec.mean_image : reference image to use
+#         inputspec.target_image : registration target
+#
+#     Outputs:
+#         outputspec.func2anat_transform : FLIRT transform
+#         outputspec.anat2target_transform : FLIRT+FNIRT transform
+#         outputspec.transformed_files : transformed files in target space
+#         outputspec.transformed_mean : mean image in target space
+#     """
+#     raise RuntimeError("We think we are not using this piece")
+#     register = Workflow(name=name)
+#
+#     # TODO: source_files are passed to warpall, which is complaining about receiving list
+#     # instead of existing file name.
+#     inputnode = Node(interface=IdentityInterface(fields=['source_files',
+#                                                          'mean_image',
+#                                                          'subject_id',
+#                                                          'subjects_dir',
+#                                                          'target_image']),
+#                      name='inputspec')
+#
+#     outputnode = Node(interface=IdentityInterface(fields=['func2anat_transform',
+#                                                           'out_reg_file',
+#                                                           'anat2target_transform',
+#                                                           'transforms',
+#                                                           'transformed_mean',
+#                                                           'transformed_files',
+#                                                           'min_cost_file',
+#                                                           'anat2target',
+#                                                           'aparc',
+#                                                           'mean2anat_mask'
+#                                                           ]),
+#                       name='outputspec')
+#
+#     # Get the subject's freesurfer source directory
+#     fssource = Node(FreeSurferSource(),
+#                     name='fssource')
+#     fssource.run_without_submitting = True
+#     register.connect(inputnode, 'subject_id', fssource, 'subject_id')
+#     register.connect(inputnode, 'subjects_dir', fssource, 'subjects_dir')
+#
+#     convert = Node(freesurfer.MRIConvert(out_type='nii'),
+#                    name="convert")
+#     register.connect(fssource, 'T1', convert, 'in_file')
+#
+#     # Coregister the median to the surface
+#     bbregister = Node(freesurfer.BBRegister(registered_file=True),
+#                       name='bbregister')
+#     bbregister.inputs.init = 'fsl'
+#     bbregister.inputs.contrast_type = 't2'
+#     bbregister.inputs.out_fsl_file = True
+#     bbregister.inputs.epi_mask = True
+#     register.connect(inputnode, 'subject_id', bbregister, 'subject_id')
+#     register.connect(inputnode, 'mean_image', bbregister, 'source_file')
+#     register.connect(inputnode, 'subjects_dir', bbregister, 'subjects_dir')
+#
+#     # Create a mask of the median coregistered to the anatomical image
+#     mean2anat_mask = Node(fsl.BET(mask=True), name='mean2anat_mask')
+#     register.connect(bbregister, 'registered_file', mean2anat_mask, 'in_file')
+#
+#     """
+#     use aparc+aseg's brain mask
+#     """
+#
+#     binarize = Node(fs.Binarize(min=0.5, out_type="nii.gz", dilate=1), name="binarize_aparc")
+#     register.connect(fssource, ("aparc_aseg", get_aparc_aseg), binarize, "in_file")
+#
+#     stripper = Node(fsl.ApplyMask(), name='stripper')
+#     register.connect(binarize, "binary_file", stripper, "mask_file")
+#     register.connect(convert, 'out_file', stripper, 'in_file')
+#
+#     """
+#     Apply inverse transform to aparc file
+#     """
+#
+#     aparcxfm = Node(freesurfer.ApplyVolTransform(inverse=True,
+#                                                  interp='nearest'),
+#                     name='aparc_inverse_transform')
+#     register.connect(inputnode, 'subjects_dir', aparcxfm, 'subjects_dir')
+#     register.connect(bbregister, 'out_reg_file', aparcxfm, 'reg_file')
+#     register.connect(fssource, ('aparc_aseg', get_aparc_aseg),
+#                      aparcxfm, 'target_file')
+#     register.connect(inputnode, 'mean_image', aparcxfm, 'source_file')
+#
+#     """
+#     Convert the BBRegister transformation to ANTS ITK format
+#     """
+#
+#     convert2itk = Node(C3dAffineTool(), name='convert2itk')
+#     convert2itk.inputs.fsl2ras = True
+#     convert2itk.inputs.itk_transform = True
+#     register.connect(bbregister, 'out_fsl_file', convert2itk, 'transform_file')
+#     register.connect(inputnode, 'mean_image', convert2itk, 'source_file')
+#     register.connect(stripper, 'out_file', convert2itk, 'reference_file')
+#
+#     """
+#     Compute registration between the subject's structural and MNI template
+#     This is currently set to perform a very quick registration. However, the
+#     registration can be made significantly more accurate for cortical
+#     structures by increasing the number of iterations
+#     All parameters are set using the example from:
+#     #https://github.com/stnava/ANTs/blob/master/Scripts/newAntsExample.sh
+#     """
+#
+#     reg = Node(ants.Registration(), name='antsRegister')
+#     reg.inputs.output_transform_prefix = "output_"
+#     reg.inputs.transforms = ['Rigid', 'Affine', 'SyN']
+#     reg.inputs.transform_parameters = [(0.1,), (0.1,), (0.2, 3.0, 0.0)]
+#     reg.inputs.number_of_iterations = [[10000, 11110, 11110]] * 2 + [[100, 30, 20]]
+#     reg.inputs.dimension = 3
+#     reg.inputs.write_composite_transform = True
+#     reg.inputs.collapse_output_transforms = True
+#     reg.inputs.initial_moving_transform_com = True
+#     reg.inputs.metric = ['Mattes'] * 2 + [['Mattes', 'CC']]
+#     reg.inputs.metric_weight = [1] * 2 + [[0.5, 0.5]]
+#     reg.inputs.radius_or_number_of_bins = [32] * 2 + [[32, 4]]
+#     reg.inputs.sampling_strategy = ['Regular'] * 2 + [[None, None]]
+#     reg.inputs.sampling_percentage = [0.3] * 2 + [[None, None]]
+#     reg.inputs.convergence_threshold = [1.e-8] * 2 + [-0.01]
+#     reg.inputs.convergence_window_size = [20] * 2 + [5]
+#     reg.inputs.smoothing_sigmas = [[4, 2, 1]] * 2 + [[1, 0.5, 0]]
+#     reg.inputs.sigma_units = ['vox'] * 3
+#     reg.inputs.shrink_factors = [[3, 2, 1]] * 2 + [[4, 2, 1]]
+#     reg.inputs.use_estimate_learning_rate_once = [True] * 3
+#     reg.inputs.use_histogram_matching = [False] * 2 + [True]
+#     reg.inputs.winsorize_lower_quantile = 0.005
+#     reg.inputs.winsorize_upper_quantile = 0.995
+#     reg.inputs.float = True
+#     reg.inputs.output_warped_image = 'output_warped_image.nii.gz'
+#     reg.inputs.num_threads = 4
+#     reg.plugin_args = {'qsub_args': '-pe orte 4',
+#                        'sbatch_args': '--mem=6G -c 4'}
+#     register.connect(stripper, 'out_file', reg, 'moving_image')
+#     register.connect(inputnode, 'target_image', reg, 'fixed_image')
+#
+#     """
+#     Concatenate the affine and ants transforms into a list
+#     """
+#
+#     pickfirst = lambda x: x[0]
+#
+#     merge = Node(Merge(2), iterfield=['in2'], name='mergexfm')
+#     register.connect(convert2itk, 'itk_transform', merge, 'in2')
+#     register.connect(reg, 'composite_transform', merge, 'in1')
+#
+#     """
+#     Transform the mean image. First to anatomical and then to target
+#     """
+#
+#     warpmean = Node(ants.ApplyTransforms(), name='warpmean')
+#     warpmean.inputs.input_image_type = 0
+#     warpmean.inputs.interpolation = 'Linear'
+#     warpmean.inputs.invert_transform_flags = [False, False]
+#     warpmean.inputs.terminal_output = 'file'
+#     warpmean.inputs.args = '--float'
+#
+#     """
+#     Transform the remaining images. First to anatomical and then to target
+#     """
+#     # TODO: ValueError: Input should be str (filename of contrast) not list.
+#     # But it is a MapNode already!?
+#     warpall = MapNode(ants.ApplyTransforms(),
+#                       iterfield=['input_image'],
+#                       name='warpall')
+#     warpall.inputs.input_image_type = 0
+#     warpall.inputs.interpolation = 'Linear'
+#     warpall.inputs.invert_transform_flags = [False, False]
+#     warpall.inputs.terminal_output = 'file'
+#     warpall.inputs.args = '--float'
+#     warpall.inputs.num_threads = 2
+#     warpall.plugin_args = {'sbatch_args': '--mem=6G -c 2'}
+#
+#     """
+#     Since now we have a list of lists (flameo0/cope1 kinda) we need to flatten them
+#     into a list before we pass it into warpall
+#
+#     """
+#     from nipype.interfaces.utility import Merge
+#     flattencopes = Node(Merge(), name="flattencopes")
+#
+#     """
+#     Assign all the output files
+#     """
+#
+#     register.connect(warpmean, 'output_image', outputnode, 'transformed_mean')
+#     register.connect(warpall, 'output_image', outputnode, 'transformed_files')
+#
+#     register.connect(inputnode, 'target_image', warpmean, 'reference_image')
+#     register.connect(inputnode, 'mean_image', warpmean, 'input_image')
+#     register.connect(merge, 'out', warpmean, 'transforms')
+#     register.connect(inputnode, 'target_image', warpall, 'reference_image')
+#     register.connect(inputnode, 'source_files', flattencopes, 'in1')
+#     register.connect(flattencopes, 'out', warpall, 'input_image')
+#     register.connect(merge, 'out', warpall, 'transforms')
+#
+#     """
+#     Assign all the output files
+#     """
+#
+#     register.connect(reg, 'warped_image', outputnode, 'anat2target')
+#     register.connect(aparcxfm, 'transformed_file',
+#                      outputnode, 'aparc')
+#     register.connect(bbregister, 'out_fsl_file',
+#                      outputnode, 'func2anat_transform')
+#     register.connect(bbregister, 'out_reg_file',
+#                      outputnode, 'out_reg_file')
+#     register.connect(bbregister, 'min_cost_file',
+#                      outputnode, 'min_cost_file')
+#     register.connect(mean2anat_mask, 'mask_file',
+#                      outputnode, 'mean2anat_mask')
+#     register.connect(reg, 'composite_transform',
+#                      outputnode, 'anat2target_transform')
+#     register.connect(merge, 'out', outputnode, 'transforms')
+#
+#     return register
 
 
 """
@@ -1422,7 +1444,7 @@ if __name__ == '__main__':
 
     wf.base_dir = work_dir
     if args.write_graph:
-        wf.write_graph(args.write_graph)
+        wf.write_graph(args.write_graph, format='svg')
     elif args.plugin_args:
         wf.run(args.plugin, plugin_args=eval(args.plugin_args))
     else:
