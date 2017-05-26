@@ -117,6 +117,7 @@ def create_reg_workflow(name='registration'):
                                                                 'target_image_brain',
                                                                 'config_file']),
                         name='inputspec')
+
     outputnode = pe.Node(interface=niu.IdentityInterface(fields=['func2anat_transform',
                                                                  'anat2target_transform',
                                                                  'func2target_transforms',
@@ -266,7 +267,8 @@ def create_reg_workflow(name='registration'):
     warpall = pe.MapNode(ants.ApplyTransforms(),
                          iterfield=['input_image'],
                          name='warpall')
-    warpall.inputs.input_image_type = 0
+    #warpall.inputs.input_image_type = 0
+    warpall.inputs.input_image_type = 1
     warpall.inputs.interpolation = 'Linear'
     warpall.inputs.invert_transform_flags = [False, False]
     warpall.inputs.terminal_output = 'file'
@@ -393,6 +395,8 @@ def create_fs_reg_workflow(name='registration'):
 
     register = Workflow(name=name)
 
+    # TODO: source_files are passed to warpall, which is complaining about receiving list
+    # instead of existing file name.
     inputnode = Node(interface=IdentityInterface(fields=['source_files',
                                                          'mean_image',
                                                          'subject_id',
@@ -988,6 +992,8 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
         splits.append(len(zstats))
         return out_files, splits
 
+    # TODO: merge func takes copes from l2 and passes them to registration.
+    # Change to Mapnode?
     mergefunc = pe.Node(niu.Function(input_names=['copes', 'varcopes',
                                                   'zstats'],
                                      output_names=['out_files', 'splits'],
@@ -998,6 +1004,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                   ('varcopes', 'varcopes'),
                   ('zstats', 'zstats'),
                   ])])
+
     # TODO: maybe this one?
     wf.connect(mergefunc, 'out_files', registration, 'inputspec.source_files')
 
