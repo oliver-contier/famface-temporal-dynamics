@@ -1237,6 +1237,8 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     """
 
     def get_subs(subject_id, conds, run_id, model_id, task_id):
+        # TODO: should be passed in
+        nl2 = 2  # number of level 2 contrasts.
         subs = [('_subject_id_%s_' % subject_id, '')]
         subs.append(('_model_id_%d' % model_id, 'model%03d' % model_id))
         subs.append(('task_id_%d/' % task_id, '/task%03d_' % task_id))
@@ -1246,23 +1248,24 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                      'affine'))
 
         for i in range(len(conds)):
-            subs.append(('_flameo%d/cope1.' % i, 'cope%02d.' % (i + 1)))
-            subs.append(('_flameo%d/varcope1.' % i, 'varcope%02d.' % (i + 1)))
-            subs.append(('_flameo%d/zstat1.' % i, 'zstat%02d.' % (i + 1)))
-            subs.append(('_flameo%d/tstat1.' % i, 'tstat%02d.' % (i + 1)))
-            subs.append(('_flameo%d/res4d.' % i, 'res4d%02d.' % (i + 1)))
-            subs.append(('_warpall%d/cope1_warp.' % i,
-                         'cope%02d.' % (i + 1)))
-            subs.append(('_warpall%d/varcope1_warp.' % (len(conds) + i),
-                         'varcope%02d.' % (i + 1)))
-            subs.append(('_warpall%d/zstat1_warp.' % (2 * len(conds) + i),
-                         'zstat%02d.' % (i + 1)))
-            subs.append(('_warpall%d/cope1_trans.' % i,
-                         'cope%02d.' % (i + 1)))
-            subs.append(('_warpall%d/varcope1_trans.' % (len(conds) + i),
-                         'varcope%02d.' % (i + 1)))
-            subs.append(('_warpall%d/zstat1_trans.' % (2 * len(conds) + i),
-                         'zstat%02d.' % (i + 1)))
+            for j in xrange(nl2):
+                i1 = i + 1
+                j1 = j + 1
+                l1l2idx = '_l12:%02d%02d.' % (i1, j1)
+
+                for name in ('cope', 'varcope', 'zstat', 'tstat'):
+                    subs.append(('_flameo%(i)d/%(name)s%(j1)d.' % locals(),
+                                 '%(name)s%(l1l2idx)s' % locals()))
+                name = 'res4d' # special -- no index
+                subs.append(('_flameo%(i)d/%(name)s.' % locals(),
+                                 '%(name)s%(l1l2idx)s' % locals()))
+
+                for suf in ('_warp.', '_trans.'):
+                    subs.append((('_warpall%d/cope%d' % (i*nl2 + j, j1)) + suf, 'cope' + l1l2idx))
+                    subs.append((('_warpall%d/varcope%d' % ((len(conds) + i)*nl2 + j, j1)) + suf, 'varcope' + l1l2idx))
+                    subs.append((('_warpall%d/zstat%d' % ((2 * len(conds) + i)*nl2 + j, j1)) + suf, 'zstat' + l1l2idx))
+
+            # TODO: check if that is our client! ;)
             subs.append(('__get_aparc_means%d/' % i, '/cope%02d_' % (i + 1)))
 
         for i, run_num in enumerate(run_id):
@@ -1440,7 +1443,7 @@ if __name__ == '__main__':
                                   fwhm=args.fwhm,
                                   subjects_dir=args.subjects_dir,
                                   target=args.target_file)
-    # wf.config['execution']['remove_unnecessary_outputs'] = False
+    wf.config['execution']['remove_unnecessary_outputs'] = False
 
     wf.base_dir = work_dir
     if args.write_graph:
