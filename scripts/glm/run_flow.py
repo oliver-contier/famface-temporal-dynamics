@@ -152,7 +152,7 @@ def create_run_flow(name='run_flow'):
 
     outputspec = Node(IdentityInterface(fields=['res4d',
                                                      'copes', 'varcopes',
-                                                     'zstats', 'tstats']),
+                                                     'zstats', 'tstats', 'fstats']),
                       name='outputspec')
 
     run_flow.connect([(inputspec, copemerge, [('copes', 'in_files')]),
@@ -173,7 +173,8 @@ def create_run_flow(name='run_flow'):
                                             ('copes', 'copes'),
                                             ('var_copes', 'varcopes'),
                                             ('zstats', 'zstats'),
-                                            ('tstats', 'tstats')
+                                            ('tstats', 'tstats'),
+                                            ('fstats', 'fstats')
                                             ])
                       ])
     return run_flow

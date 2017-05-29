@@ -1238,7 +1238,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
 
     def get_subs(subject_id, conds, run_id, model_id, task_id):
         # TODO: should be passed in
-        nl2 = 2  # number of level 2 contrasts.
+        nl2 = 3  # number of level 2 contrasts.
         subs = [('_subject_id_%s_' % subject_id, '')]
         subs.append(('_model_id_%d' % model_id, 'model%03d' % model_id))
         subs.append(('task_id_%d/' % task_id, '/task%03d_' % task_id))
@@ -1251,9 +1251,9 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
             for j in xrange(nl2):
                 i1 = i + 1
                 j1 = j + 1
-                l1l2idx = '_l12:%02d%02d.' % (i1, j1)
+                l1l2idx = '_l12-%02d-l2-%02d.' % (i1, j1)
 
-                for name in ('cope', 'varcope', 'zstat', 'tstat'):
+                for name in ('cope', 'varcope', 'zstat', 'tstat', 'fstat'):
                     subs.append(('_flameo%(i)d/%(name)s%(j1)d.' % locals(),
                                  '%(name)s%(l1l2idx)s' % locals()))
                 name = 'res4d' # special -- no index
@@ -1316,7 +1316,8 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                   ('copes', 'copes'),
                   ('varcopes', 'varcopes'),
                   ('zstats', 'zstats'),
-                  ('tstats', 'tstats')])
+                  ('tstats', 'tstats'),
+                  ('fstats', 'fstats')])
                 ])
 
     wf.connect([(modelfit.get_node('modelgen'), datasink,
