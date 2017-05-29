@@ -101,10 +101,13 @@ def create_run_flow(name='run_flow'):
             # if contrast is an F-Test
             elif 'F' in conline:
                 runtrast.append((conline[0], conline[1], [(conline[2], conline[3], [conline[4]], [float(conline[5])])]))
-        return evdict, runtrast
+
+        nl2 = len(runtrast)
+
+        return evdict, runtrast, nl2
 
     run_contrast = Node(Function(input_names=['con_file', 'ev_file'],
-                                 output_names=['evdict', 'runtrast'],
+                                 output_names=['evdict', 'runtrast', 'nl2'],
                                  function=get_run_contrast),
                         name='run_contrast')
 
@@ -151,8 +154,9 @@ def create_run_flow(name='run_flow'):
     """
 
     outputspec = Node(IdentityInterface(fields=['res4d',
-                                                     'copes', 'varcopes',
-                                                     'zstats', 'tstats', 'fstats']),
+                                                'copes', 'varcopes',
+                                                'zstats', 'tstats',
+                                                'fstats', 'nl2']),
                       name='outputspec')
 
     run_flow.connect([(inputspec, copemerge, [('copes', 'in_files')]),
@@ -163,12 +167,13 @@ def create_run_flow(name='run_flow'):
                       (varcopemerge, flameo, [('merged_file',
                                                'var_cope_file')]),
                       (run_contrast, level2model, [('evdict', 'regressors'),
-                                                       ('runtrast', 'contrasts')]),
+                                                   ('runtrast', 'contrasts')]),
                       (level2model, flameo, [('design_mat', 'design_file'),
                                              ('design_con', 't_con_file'),
                                              ('design_fts', 'f_con_file'),
                                              ('design_grp', 'cov_split_file')]),
                       (gendof, flameo, [('dof_volume', 'dof_var_cope_file')]),
+                      (run_contrast, outputspec, [('nl2', 'nl2')]),
                       (flameo, outputspec, [('res4d', 'res4d'),
                                             ('copes', 'copes'),
                                             ('var_copes', 'varcopes'),

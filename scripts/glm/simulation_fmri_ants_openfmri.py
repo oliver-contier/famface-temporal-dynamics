@@ -1236,9 +1236,9 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     Connect to a datasink
     """
 
-    def get_subs(subject_id, conds, run_id, model_id, task_id):
+    def get_subs(subject_id, conds, run_id, model_id, task_id, nl2):
         # TODO: should be passed in
-        nl2 = 3  # number of level 2 contrasts.
+        #nl2 = 3  # number of level 2 contrasts.
         subs = [('_subject_id_%s_' % subject_id, '')]
         subs.append(('_model_id_%d' % model_id, 'model%03d' % model_id))
         subs.append(('task_id_%d/' % task_id, '/task%03d_' % task_id))
@@ -1297,7 +1297,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
         return subs
 
     subsgen = pe.Node(niu.Function(input_names=['subject_id', 'conds', 'run_id',
-                                                'model_id', 'task_id'],
+                                                'model_id', 'task_id', 'nl2'],
                                    output_names=['substitutions'],
                                    function=get_subs),
                       name='subsgen')
@@ -1306,6 +1306,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     datasink = pe.Node(interface=nio.DataSink(),
                        name="datasink")
     wf.connect(infosource, 'subject_id', datasink, 'container')
+    wf.connect(fixed_fx.get_node('outputspec'), 'nl2', subsgen, 'nl2')
     wf.connect(infosource, 'subject_id', subsgen, 'subject_id')
     wf.connect(infosource, 'model_id', subsgen, 'model_id')
     wf.connect(infosource, 'task_id', subsgen, 'task_id')
