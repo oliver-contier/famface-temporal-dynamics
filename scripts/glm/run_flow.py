@@ -93,15 +93,21 @@ def create_run_flow(name='run_flow'):
             conlines = [i.split() for i in f.readlines()]
         runtrast = []
         for conline in conlines:
-            runtrast.append(tuple(conline[0:2] + [[conline[2]]] + [[float(conline[3])]]))
-
+            if conline[0] == '#':
+                continue
+            # if contrast is a T-Test
+            elif conline[1]=='T':
+                runtrast.append(tuple(conline[0:2] + [[conline[2]]] + [[float(conline[3])]]))
+            # if contrast is an F-Test
+            elif 'F' in conline:
+                runtrast.append((conline[0], conline[1], [(conline[2], conline[3], [conline[4]], [float(conline[5])])]))
         return evdict, runtrast
 
     run_contrast = Node(Function(input_names=['con_file', 'ev_file'],
                                  output_names=['evdict', 'runtrast'],
                                  function=get_run_contrast),
                         name='run_contrast')
-    
+
     run_contrast.inputs.con_file = runmodel_dir + 'runcontrast.txt'
     run_contrast.inputs.ev_file = runmodel_dir + 'behav.txt'
 
