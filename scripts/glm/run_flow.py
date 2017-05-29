@@ -166,6 +166,7 @@ def create_run_flow(name='run_flow'):
                                                        ('runtrast', 'contrasts')]),
                       (level2model, flameo, [('design_mat', 'design_file'),
                                              ('design_con', 't_con_file'),
+                                             ('design_fts', 'f_con_file'),
                                              ('design_grp', 'cov_split_file')]),
                       (gendof, flameo, [('dof_volume', 'dof_var_cope_file')]),
                       (flameo, outputspec, [('res4d', 'res4d'),
