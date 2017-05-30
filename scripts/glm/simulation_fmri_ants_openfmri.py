@@ -1003,21 +1003,21 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
         registration.inputs.inputspec.target_image_brain = fsl.Info.standard_image('MNI152_T1_2mm_brain.nii.gz')
         registration.inputs.inputspec.config_file = 'T1_2_MNI152_2mm'
 
-    def merge_files(copes, varcopes, zstats):
+    def merge_files(copes, varcopes, zstats, ts):
         out_files = []
         splits = []
         out_files.extend(copes)
-        splits.append(len(copes))
+        splits.append(len(copes)*ts)
         out_files.extend(varcopes)
-        splits.append(len(varcopes))
+        splits.append(len(varcopes)*ts)
         out_files.extend(zstats)
-        splits.append(len(zstats))
+        splits.append(len(zstats)*ts)
         return out_files, splits
 
     # TODO: merge func takes copes from l2 and passes them to registration.
     # Change to Mapnode?
     mergefunc = pe.Node(niu.Function(input_names=['copes', 'varcopes',
-                                                  'zstats'],
+                                                  'zstats', 'ts'],
                                      output_names=['out_files', 'splits'],
                                      function=merge_files),
                         name='merge_files')
@@ -1025,6 +1025,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                  [('copes', 'copes'),
                   ('varcopes', 'varcopes'),
                   ('zstats', 'zstats'),
+                  ('ts', 'ts')
                   ])])
 
     # TODO: maybe this one?
@@ -1236,9 +1237,9 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     Connect to a datasink
     """
 
-    def get_subs(subject_id, conds, run_id, model_id, task_id, nl2):
+    def get_subs(subject_id, conds, run_id, model_id, task_id, ts):
         # TODO: should be passed in
-        #nl2 = 3  # number of level 2 contrasts.
+        #ts = 3  # number of level 2 contrasts.
         subs = [('_subject_id_%s_' % subject_id, '')]
         subs.append(('_model_id_%d' % model_id, 'model%03d' % model_id))
         subs.append(('task_id_%d/' % task_id, '/task%03d_' % task_id))
@@ -1248,22 +1249,44 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                      'affine'))
 
         for i in range(len(conds)):
-            for j in xrange(nl2):
+            for j in xrange(ts):
                 i1 = i + 1
                 j1 = j + 1
-                l1l2idx = '_l12-%02d-l2-%02d.' % (i1, j1)
+                l1l2idx = '_l1-%02d-l2-%02d.' % (i1, j1)
 
                 for name in ('cope', 'varcope', 'zstat', 'tstat', 'fstat'):
                     subs.append(('_flameo%(i)d/%(name)s%(j1)d.' % locals(),
                                  '%(name)s%(l1l2idx)s' % locals()))
-                name = 'res4d' # special -- no index
-                subs.append(('_flameo%(i)d/%(name)s.' % locals(),
-                                 '%(name)s%(l1l2idx)s' % locals()))
 
-                for suf in ('_warp.', '_trans.'):
-                    subs.append((('_warpall%d/cope%d' % (i*nl2 + j, j1)) + suf, 'cope' + l1l2idx))
-                    subs.append((('_warpall%d/varcope%d' % ((len(conds) + i)*nl2 + j, j1)) + suf, 'varcope' + l1l2idx))
-                    subs.append((('_warpall%d/zstat%d' % ((2 * len(conds) + i)*nl2 + j, j1)) + suf, 'zstat' + l1l2idx))
+                name = 'res4d'  # special -- no index
+                subs.append(('_flameo%(i)d/%(name)s.' % locals(),
+                             '%(name)s%(l1l2idx)s' % locals()))
+
+        dircount = 0
+        for stat in ['cope', 'varcope', 'zstat']:
+            for i in range(len(conds)):
+                for j in xrange(2):
+                    i1 = i + 1
+                    j1 = j + 1
+                    l1l2idx = '_l1-%02d-l2-%02d.' % (i1, j1)
+                    for suf in ( '_trans.', ):  #'_warp.',
+                        subs.append((('_warpall%d/cope%d' % (dircount, j1)) + suf, 'mni/' + stat + l1l2idx))
+                        #subs.append((('_warpall%d/cope%d' % (dircount+1, j1)) + suf, stat + l1l2idx))
+                        dircount += 1
+
+                        #subs.append(
+                        #    (('_warpall%d/varcope%d' % ((len(conds) + i) * ts + j, j1)) + suf, 'varcope' + l1l2idx))
+                        #subs.append(
+                        #    (('_warpall%d/zstat%d' % ((2 * len(conds) + i) * ts + j, j1)) + suf, 'zstat' + l1l2idx))
+
+            def check_for_collisions():
+                cols = {}
+                for x, y in subs:
+                    if y in cols and x != cols[y]:
+                        raise RuntimeError("collision %s - %s although already was mapped to %s" % (x, y, cols[y]))
+                    else:
+                        cols[y] = x
+            check_for_collisions()
 
             # TODO: check if that is our client! ;)
             subs.append(('__get_aparc_means%d/' % i, '/cope%02d_' % (i + 1)))
@@ -1293,11 +1316,12 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
         for i in range(3):
             subs.append(('_warpsegment%d' % i, '/'))
         subs.append(('mni/model%03d' % model_id, 'mni'))
+        subs.append(('mni/mni/', 'mni/'))
 
         return subs
 
     subsgen = pe.Node(niu.Function(input_names=['subject_id', 'conds', 'run_id',
-                                                'model_id', 'task_id', 'nl2'],
+                                                'model_id', 'task_id', 'ts'],
                                    output_names=['substitutions'],
                                    function=get_subs),
                       name='subsgen')
@@ -1306,7 +1330,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     datasink = pe.Node(interface=nio.DataSink(),
                        name="datasink")
     wf.connect(infosource, 'subject_id', datasink, 'container')
-    wf.connect(fixed_fx.get_node('outputspec'), 'nl2', subsgen, 'nl2')
+    wf.connect(fixed_fx.get_node('outputspec'), 'ts', subsgen, 'ts')
     wf.connect(infosource, 'subject_id', subsgen, 'subject_id')
     wf.connect(infosource, 'model_id', subsgen, 'model_id')
     wf.connect(infosource, 'task_id', subsgen, 'task_id')
