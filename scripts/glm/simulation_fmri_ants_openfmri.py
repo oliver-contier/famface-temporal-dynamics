@@ -645,7 +645,7 @@ def get_subjectinfo(subject_id, base_dir, task_id, model_id):
     import os
     import numpy as np
     condition_info = []
-    cond_file = os.path.join(base_dir, 'data', 'models', 'model%03d' % model_id,
+    cond_file = os.path.join(base_dir, 'models', 'model%03d' % model_id,
                              'condition_key.txt')
     with open(cond_file, 'rt') as fp:
         for line in fp:
@@ -666,13 +666,13 @@ def get_subjectinfo(subject_id, base_dir, task_id, model_id):
 
         # TODO: Maybe this needs to be changed too. The rest of these directories with 'BOLD'
         # TODO: in it seem not to be relevant.
-        files = sorted(glob(os.path.join(base_dir,'data',
+        files = sorted(glob(os.path.join(base_dir,
                                          subject_id,
                                          'BOLD',
                                          'task%03d_run*' % (idx + 1))))
         runs = [int(val[-3:]) for val in files]
         run_ids.insert(idx, runs)
-    json_info = os.path.join(base_dir, 'data', subject_id, 'BOLD',
+    json_info = os.path.join(base_dir, subject_id, 'BOLD',
                              'task%03d_run%03d' % (task_id, run_ids[task_id - 1][0]),
                              'bold_scaninfo.json')
     if os.path.exists(json_info):
@@ -681,13 +681,13 @@ def get_subjectinfo(subject_id, base_dir, task_id, model_id):
             data = json.load(fp)
             TR = data['global']['const']['RepetitionTime'] / 1000.
     else:
-        task_scan_key = os.path.join(base_dir, 'data', subject_id, 'BOLD',
+        task_scan_key = os.path.join(base_dir, subject_id, 'BOLD',
                                      'task%03d_run%03d' % (task_id, run_ids[task_id - 1][0]),
                                      'scan_key.txt')
         if os.path.exists(task_scan_key):
             TR = np.genfromtxt(task_scan_key)[1]
         else:
-            TR = np.genfromtxt(os.path.join(base_dir, 'data', 'scan_key.txt'))[1]
+            TR = np.genfromtxt(os.path.join(base_dir, 'scan_key.txt'))[1]
     return run_ids[task_id - 1], conds[task_id - 1], TR
 
 
@@ -738,7 +738,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
 
     # TODO: tried to modify here too
     subjects = sorted([path.split(os.path.sep)[-1] for path in
-                       glob(os.path.join(data_dir, 'data', subj_prefix))])
+                       glob(os.path.join(data_dir, subj_prefix))])
 
     infosource = pe.Node(niu.IdentityInterface(fields=['subject_id',
                                                        'model_id',
@@ -766,7 +766,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     """
 
     # TODO: changed dir here too in order to get all the contrasts
-    contrast_file = os.path.join(data_dir, 'data', 'models', 'model%03d' % model_id,
+    contrast_file = os.path.join(data_dir, 'models', 'model%03d' % model_id,
                                  'task_contrasts.txt')
 
     has_contrast = os.path.exists(contrast_file)
@@ -786,11 +786,11 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
 
     # TODO: Modify input path for BOLD
     if has_contrast:
-        datasource.inputs.field_template = {'anat': 'data/%s/anatomy/highres001.nii.gz',
-                                            'bold': 'oli/simulation/data/%s/BOLD/task%03d_r*/bold.nii.gz',
-                                            'behav': ('data/%s/model/model%03d/onsets/task%03d_'
+        datasource.inputs.field_template = {'anat': '%s/anatomy/highres001.nii.gz',
+                                            'bold': '%s/BOLD/task%03d_r*/sim.nii.gz',
+                                            'behav': ('%s/model/model%03d/onsets/task%03d_'
                                                       'run%03d/cond*.txt'),
-                                            'contrasts': ('data/models/model%03d/'
+                                            'contrasts': ('models/model%03d/'
                                                           'task_contrasts.txt')}
         datasource.inputs.template_args = {'anat': [['subject_id']],
                                            'bold': [['subject_id', 'task_id']],
@@ -798,9 +798,9 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                                                       'task_id', 'run_id']],
                                            'contrasts': [['model_id']]}
     else:
-        datasource.inputs.field_template = {'anat': 'data/%s/anatomy/highres001.nii.gz',
-                                            'bold': 'oli/simulation/data/%s/BOLD/task%03d_r*/bold.nii.gz',
-                                            'behav': ('data/%s/model/model%03d/onsets/task%03d_'
+        datasource.inputs.field_template = {'anat': '%s/anatomy/highres001.nii.gz',
+                                            'bold': '%s/BOLD/task%03d_r*/sim.nii.gz',
+                                            'behav': ('%s/model/model%03d/onsets/task%03d_'
                                                       'run%03d/cond*.txt')}
         datasource.inputs.template_args = {'anat': [['subject_id']],
                                            'bold': [['subject_id', 'task_id']],
@@ -1254,7 +1254,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                 j1 = j + 1
                 l1l2idx = '_l1-%02d-l2-%02d.' % (i1, j1)
 
-                for name in ('cope', 'varcope', 'zstat', 'tstat', 'fstat'):
+                for name in ('cope', 'varcope', 'zstat', 'tstat'):
                     subs.append(('_flameo%(i)d/%(name)s%(j1)d.' % locals(),
                                  '%(name)s%(l1l2idx)s' % locals()))
 
@@ -1269,8 +1269,8 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                     i1 = i + 1
                     j1 = j + 1
                     l1l2idx = '_l1-%02d-l2-%02d.' % (i1, j1)
-                    for suf in ( '_trans.', ):  #'_warp.',
-                        subs.append((('_warpall%d/cope%d' % (dircount, j1)) + suf, 'mni/' + stat + l1l2idx))
+                    for suf in ('_trans.', ):  #'_warp.',
+                        subs.append((('_warpall%d/%s%d' % (dircount, stat, j1)) + suf, 'mni/' + stat + l1l2idx))
                         #subs.append((('_warpall%d/cope%d' % (dircount+1, j1)) + suf, stat + l1l2idx))
                         dircount += 1
 
@@ -1341,8 +1341,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                   ('copes', 'copes'),
                   ('varcopes', 'varcopes'),
                   ('zstats', 'zstats'),
-                  ('tstats', 'tstats'),
-                  ('fstats', 'fstats')])
+                  ('tstats', 'tstats')])
                 ])
 
     wf.connect([(modelfit.get_node('modelgen'), datasink,
