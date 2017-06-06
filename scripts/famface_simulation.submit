@@ -1,65 +1,72 @@
 Universe   = vanilla
-Executable = run_sim.sh
-Arguments  = sub005
+Executable = run_simulation.sh
 Log        = famface_simulation.log
 Output     = famface_simulation.out
 Error      = famface_simulation.error
 
+Arguments  = sub001
 Queue
-Arguments = sub006
+Arguments  = sub002
 Queue
-Arguments = sub007
+Arguments  = sub003
 Queue
-Arguments = sub008
+Arguments  = sub004
 Queue
-Arguments = sub009
+Arguments  = sub005
 Queue
-Arguments = sub010
+Arguments  = sub006
 Queue
-Arguments = sub011
+Arguments  = sub007
 Queue
-Arguments = sub012
+Arguments  = sub008
 Queue
-Arguments = sub013
+Arguments  = sub009
 Queue
-Arguments = sub014
+Arguments  = sub010
 Queue
-Arguments = sub015
+Arguments  = sub011
 Queue
-Arguments = sub016
+Arguments  = sub012
 Queue
-Arguments = sub017
+Arguments  = sub013
 Queue
-Arguments = sub018
+Arguments  = sub014
 Queue
-Arguments = sub019
+Arguments  = sub015
 Queue
-Arguments = sub021
+Arguments  = sub016
 Queue
-Arguments = sub022
+Arguments  = sub017
 Queue
-Arguments = sub023
+Arguments  = sub018
 Queue
-Arguments = sub024
+Arguments  = sub019
 Queue
-Arguments = sub025
+Arguments  = sub020
 Queue
-Arguments = sub026
+Arguments  = sub021
 Queue
-Arguments = sub027
+Arguments  = sub022
 Queue
-Arguments = sub028
+Arguments  = sub023
 Queue
-Arguments = sub029
+Arguments  = sub024
 Queue
-Arguments = sub030
+Arguments  = sub025
 Queue
-Arguments = sub031
+Arguments  = sub026
 Queue
-Arguments = sub032
+Arguments  = sub027
 Queue
-Arguments = sub033
+Arguments  = sub028
 Queue
-
-# to submit the job, type in the console:
-# condor_submit submit
+Arguments  = sub029
+Queue
+Arguments  = sub030
+Queue
+Arguments  = sub031
+Queue
+Arguments  = sub032
+Queue
+Arguments  = sub033
+Queue
