@@ -1,0 +1,6 @@
+Universe    = vanilla
+Executable  = simulation_runl2.sh
+Log         = simulation_runl2.log
+Output      = simulation_runl2.out
+Error       = simulation_runl2.error
+Queue
