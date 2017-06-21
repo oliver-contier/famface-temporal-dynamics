@@ -1,0 +1,3 @@
+[submodule "glm"]
+	path = glm
+	url = /data/famface/openfmri/oli/osf_prereg_code/simulation/glm
