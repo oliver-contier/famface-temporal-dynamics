@@ -1,0 +1,15 @@
+#!/bin/bash 
+
+# manage resources
+#PBS -l nodes=1:ppn=16
+#PBS -l walltime=10:00:00
+#PBS -M o.contier@gmail.com
+
+# get singularity
+module add singularity
+
+# execute run-script from inside container
+singularity exec -B /idata/DBIC/yhalchen/oliver:/home/ \
+	/idata/DBIC/yhalchen/oliver/neurodebian-v1.1+ants+c3d.img \
+	bash /home/simulation/scripts/glm/simulation_runl2.sh
+

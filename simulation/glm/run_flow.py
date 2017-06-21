@@ -31,7 +31,7 @@ def create_run_flow(name='run_flow'):
     """
     Instantiate Workflow
     """
-    runmodel_dir = '/data/famface/openfmri/data/run-groups/'
+    runmodel_dir = '/home/data_oli/run-groups/'
     run_flow = Workflow(name=name)
     inputspec = Node(IdentityInterface(fields=['copes',
                                                'varcopes',
@@ -78,6 +78,7 @@ def create_run_flow(name='run_flow'):
         runtrast:   list
             containing 2nd lvl contrasts. 
         """
+
         # create regressor dict
         with open(ev_file, 'rt') as f:
             evlines = [line.split() for line in f.readlines()]
@@ -91,19 +92,16 @@ def create_run_flow(name='run_flow'):
         # TODO: this works with simple main effects. Should be made more flexible later on.
         with open(con_file, 'rt') as f:
             conlines = [i.split() for i in f.readlines()]
+
         runtrast = []
+
         for conline in conlines:
             if conline[0] == '#':
                 continue
             # if contrast is a T-Test
             elif conline[1]=='T':
                 runtrast.append(tuple(conline[0:2] + [[conline[2]]] + [[float(conline[3])]]))
-            # if contrast is an F-Test
-            elif 'F' in conline:
-                runtrast.append((conline[0], conline[1], [(conline[2], conline[3], [conline[4]], [float(conline[5])])]))
-
         nl2 = len(runtrast)
-
         return evdict, runtrast, nl2
 
     run_contrast = Node(Function(input_names=['con_file', 'ev_file'],
@@ -156,7 +154,7 @@ def create_run_flow(name='run_flow'):
     outputspec = Node(IdentityInterface(fields=['res4d',
                                                 'copes', 'varcopes',
                                                 'zstats', 'tstats',
-                                                'fstats', 'nl2']),
+                                                'nl2']),
                       name='outputspec')
 
     run_flow.connect([(inputspec, copemerge, [('copes', 'in_files')]),
@@ -178,8 +176,7 @@ def create_run_flow(name='run_flow'):
                                             ('copes', 'copes'),
                                             ('var_copes', 'varcopes'),
                                             ('zstats', 'zstats'),
-                                            ('tstats', 'tstats'),
-                                            ('fstats', 'fstats')
+                                            ('tstats', 'tstats')
                                             ])
                       ])
     return run_flow

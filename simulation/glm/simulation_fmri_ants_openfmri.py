@@ -63,7 +63,13 @@ imports = ['import os',
 
 
 def flatten_list(in1):
-    return sum(in1, [])
+    if type(in1) == list:
+        return sum(in1, [])
+    elif type(in1) == str:
+        return in1
+    else:
+        raise TypeError("input is neither list nor string. don't know what to do with it!")
+
 
 def median(in_files):
     """Computes an average of the median of each realigned timeseries
@@ -933,6 +939,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
 
     # Comute TSNR on realigned data regressing polynomials upto order 2
     tsnr = MapNode(TSNR(regress_poly=2), iterfield=['in_file'], name='tsnr')
+
     wf.connect(preproc, "outputspec.realigned_files", tsnr, "in_file")
 
     # Compute the median image across runs
@@ -1003,21 +1010,21 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
         registration.inputs.inputspec.target_image_brain = fsl.Info.standard_image('MNI152_T1_2mm_brain.nii.gz')
         registration.inputs.inputspec.config_file = 'T1_2_MNI152_2mm'
 
-    def merge_files(copes, varcopes, zstats, ts):
+    def merge_files(copes, varcopes, zstats, nl2):
         out_files = []
         splits = []
         out_files.extend(copes)
-        splits.append(len(copes)*ts)
+        splits.append(len(copes) * nl2)
         out_files.extend(varcopes)
-        splits.append(len(varcopes)*ts)
+        splits.append(len(varcopes) * nl2)
         out_files.extend(zstats)
-        splits.append(len(zstats)*ts)
+        splits.append(len(zstats) * nl2)
         return out_files, splits
 
     # TODO: merge func takes copes from l2 and passes them to registration.
     # Change to Mapnode?
     mergefunc = pe.Node(niu.Function(input_names=['copes', 'varcopes',
-                                                  'zstats', 'ts'],
+                                                  'zstats', 'nl2'],
                                      output_names=['out_files', 'splits'],
                                      function=merge_files),
                         name='merge_files')
@@ -1025,7 +1032,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                  [('copes', 'copes'),
                   ('varcopes', 'varcopes'),
                   ('zstats', 'zstats'),
-                  ('ts', 'ts')
+                  ('nl2', 'nl2')
                   ])])
 
     # TODO: maybe this one?
@@ -1237,9 +1244,8 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     Connect to a datasink
     """
 
-    def get_subs(subject_id, conds, run_id, model_id, task_id, ts):
+    def get_subs(subject_id, conds, run_id, model_id, task_id, nl2):
         # TODO: should be passed in
-        #ts = 3  # number of level 2 contrasts.
         subs = [('_subject_id_%s_' % subject_id, '')]
         subs.append(('_model_id_%d' % model_id, 'model%03d' % model_id))
         subs.append(('task_id_%d/' % task_id, '/task%03d_' % task_id))
@@ -1249,7 +1255,8 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                      'affine'))
 
         for i in range(len(conds)):
-            for j in xrange(ts):
+            # nl2: number of level 2 regressors (run level)
+            for j in xrange(nl2):
                 i1 = i + 1
                 j1 = j + 1
                 l1l2idx = '_l1-%02d-l2-%02d.' % (i1, j1)
@@ -1321,7 +1328,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
         return subs
 
     subsgen = pe.Node(niu.Function(input_names=['subject_id', 'conds', 'run_id',
-                                                'model_id', 'task_id', 'ts'],
+                                                'model_id', 'task_id', 'nl2'],
                                    output_names=['substitutions'],
                                    function=get_subs),
                       name='subsgen')
@@ -1330,7 +1337,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     datasink = pe.Node(interface=nio.DataSink(),
                        name="datasink")
     wf.connect(infosource, 'subject_id', datasink, 'container')
-    wf.connect(fixed_fx.get_node('outputspec'), 'ts', subsgen, 'ts')
+    wf.connect(fixed_fx.get_node('outputspec'), 'nl2', subsgen, 'nl2')
     wf.connect(infosource, 'subject_id', subsgen, 'subject_id')
     wf.connect(infosource, 'model_id', subsgen, 'model_id')
     wf.connect(infosource, 'task_id', subsgen, 'task_id')

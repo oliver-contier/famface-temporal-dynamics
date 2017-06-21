@@ -146,7 +146,7 @@ def group_multregress_openfmri(dataset_dir, model_id=None, task_id=None, l1outpu
 
             # contrast sorting
             dg.inputs.template = os.path.join(l1output_dir,
-                                              'model%03d/task%03d/%s/%scopes/%smni/%scope%02d.nii%s')
+                                              'model%03d/task%03d/%s/%scopes/%smni/%scope%s.nii%s')
             if use_spm:
                 dg.inputs.template_args['copes'] = [['model_id', 'task_id', subj_list, '', 'spm/',
                                                      '', 'cope_id', '']]

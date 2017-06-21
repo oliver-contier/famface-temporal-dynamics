@@ -1,0 +1,16 @@
+#!/bin/bash 
+
+#PBS -l nodes=1:ppn=16
+#PBS -l walltime=10:00:00
+#PBS -M o.contier@gmail.com
+
+cd /idata/DBIC/yhalchen/oliver/
+
+# get singularity
+module add singularity
+
+# execute script from inside container, taking sub as keyword argument from metarunscript
+singularity exec -B /idata/DBIC/yhalchen/oliver:/home/ \
+	/idata/DBIC/yhalchen/oliver/neurodebian-v1.1+ants+c3d.img \
+	bash /home/simulation/scripts/glm/simulation_runl1.sh $sub
+
