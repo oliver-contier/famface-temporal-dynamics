@@ -15,4 +15,4 @@ qsub -v sub="sub$sub" -N "$sub_sim_l1" pbssubmit_runl1.pbs
 done
 
 # submit just one subj
-#qsub -v sub=sub001  pbssubmit_simulation_runl1.pbs
+#qsub -v sub=sub001  pbssubmit_runl1.pbs
