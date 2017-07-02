@@ -14,6 +14,10 @@ given ROI masks in standard space.
 """
 
 
+# standard_mymachine = '/usr/local/fsl/data/standard/MNI152_T1_2mm_brain.nii.gz'
+# mask_subspace_path = mask2bold(bold, anat, roi_mask, workdir, standard=standard_mymachine)
+
+
 def mask2bold(bold, anat, roi_mask, workdir,
               standard='/usr/share/fsl/5.0/data/standard/MNI152_T1_2mm_brain.nii.gz'):
     """
@@ -85,8 +89,8 @@ def mask2bold(bold, anat, roi_mask, workdir,
     return mask_subspace_path
 
 
-def mask2anat(anat, mnimask, workdir,
-              standard='/usr/share/fsl/5.0/data/standard/MNI152_T1_2mm_brain.nii.gz'):
+def mask2pe(pe, anat, mnimask, workdir,
+            standard='/usr/share/fsl/5.0/data/standard/MNI152_T1_2mm_brain.nii.gz'):
     """
     Project mask in MNI space into individual anatomical space.
     Here, we use it to extract mean betas from individual statistical maps,
@@ -96,27 +100,45 @@ def mask2anat(anat, mnimask, workdir,
 
     # create transformation matrix from mni to anatomical
     mni2anat = fsl.FLIRT(
-        dof=12, interp='nearestneighbour',
+        dof=12, interp='trilinear',
         in_file=standard,
         reference=anat,
         out_file=join(workdir, 'mni2anat.nii.gz'),
         out_matrix_file=join(workdir, 'mni2anat.txt'))
     mni2anat.run()
 
+    # anat to parameter estimate map (3D statistical volume)
+    anat2pe = fsl.FLIRT(
+        dof=6, interp='trilinear',
+        in_file=anat,
+        reference=pe,
+        out_file=join(workdir, 'anat2pe.nii.gz'),
+        out_matrix_file=join(workdir, 'anat2pe.txt'))
+    anat2pe.run()
+
+    # concatinate matrices
+    concat = ConvertXFM(
+        concat_xfm=True,
+        in_file2=join(workdir, 'mni2anat.txt'),
+        in_file=join(workdir, 'anat2pe.txt'),
+        out_file=join(workdir, 'mni2pe.txt'))
+    concat.run()
+
     # set path to output file
-    outfile = join(workdir, 'mask2anat.nii.gz')
+    outfile = join(workdir, 'mask2pe.nii.gz')
 
     # apply transformation to mask image
-    mni2bold = fsl.FLIRT(
+    mni2pe = fsl.FLIRT(
         interp='nearestneighbour',
         apply_xfm=True,
-        in_matrix_file=join(workdir, 'mni2anat.txt'),
-        out_matrix_file=join(workdir, 'mask2anat.txt'),
+        in_matrix_file=join(workdir, 'mni2pe.txt'),
+        out_matrix_file=join(workdir, 'mask2pe.txt'),
         in_file=mnimask,
-        reference=anat,
+        reference=pe,
         out_file=outfile)
-    mni2bold.run()
+    mni2pe.run()
 
+    # return path to transformed result
     return outfile
 
 
@@ -197,7 +219,7 @@ def extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id):
         print('run {} extracted!'.format(run))
 
 
-def extract_runs_famface_betas(base_dir, out_dir, mnimask, outfilename, beta_filename):
+def extract_runs_famface_betas(base_dir, out_dir, mnimask, anat, outfilename, beta_filename):
     """
     Project the mni mask into subject space for each run. Extract the mean
     z-value value for familiar and unfamiliar faces within each roi.
@@ -214,18 +236,19 @@ def extract_runs_famface_betas(base_dir, out_dir, mnimask, outfilename, beta_fil
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
+    # workdir = join(out_dir, 'workdir', 'run_%d' % runs.index(run))
+    # if not os.path.exists(workdir):
+    #    os.makedirs(workdir)
+
+    # pick first stats map as template for co-registration.
+    stats_map_template = join(base_dir, '_modelestimate0', 'results', beta_filename)
+
+    # project mask into subject space, store in workdir, store path in variable
+    mask_subspace_path = mask2pe(stats_map_template, anat, mnimask, out_dir)
+
     for run in runs:
         # get paths for beta files for familiar and unfamiliar
         stats_map_fam = join(base_dir, run, 'results', beta_filename)
-
-        # make workdir for subject (within out_dir)
-
-        workdir = join(out_dir, 'workdir', 'run_%d' % runs.index(run))
-        if not os.path.exists(workdir):
-            os.makedirs(workdir)
-
-        # project mask into subject space, store in workdir, store path in variable
-        mask_subspace_path = mask2anat(stats_map_fam, mnimask, workdir)
 
         # load mask and stats map in pymvpa
         ms = fmri_dataset(mask_subspace_path)
@@ -235,8 +258,7 @@ def extract_runs_famface_betas(base_dir, out_dir, mnimask, outfilename, beta_fil
         run_betas = extract_mean_3d(stats_map, ms)
         betas.append(run_betas)
 
-        outfile_fullpath = join(out_dir, outfilename)
-
+    outfile_fullpath = join(out_dir, outfilename)
     with open(outfile_fullpath, 'wb') as f:
         writer = csv.writer(f)
         for b in betas:
@@ -263,28 +285,37 @@ if __name__ == '__main__':
     For extracting mean betas on discovery
     """
 
-    # pass sub0XX as argument to this script
+    # pass sub_id as argument to this script
     import sys
 
     sub_id = sys.argv[1]
 
-    # point to path on hydra
+    # path to base directory (working directory from nipype 1st lvl analysis)
     base_dir = '/data/famface/openfmri/oli/results/extract_betas/l1_workdir_betas/' \
                '_model_id_1_subject_id_%s_task_id_1/modelestimate/mapflow/' % sub_id
 
     out_dir = '/data/famface/openfmri/oli/results/extract_betas/outdir/%s' % sub_id
 
-    # set path to mnimask
+    # path to mask image
     mnimask = '/data/famface/openfmri/oli/results/results_with_main_effects/l2ants_fwhm6_hp60_derivs_frac0.1/' \
               'model001/task001/subjects_all/stats/contrast__l1-03-l2-02/' \
               'zstat1_reversed_index.nii.gz'
 
+    # path to brain extracted anatomical image
+    anat_brain = '/data/famface/openfmri/oli/simulation/nobackup_l1ants_fwhm6_hp60_derivs_frac0.1_workdir/' \
+                 'openfmri/registration/_model_id_1_subject_id_%s_task_id_1/stripper/highres001_brain.nii.gz' % sub_id
+
     # dict with conditions and pe images to extract
-    conds = {'familiar': 'pe20.nii.gz',
-             'unfamiliar': 'pe21.nii.gz'}
+    conds = {'familiar_mean_betas': 'pe20.nii.gz',
+             'unfamiliar_mean_betas': 'pe21.nii.gz',
+             'fam>unfam_mean_betas': 'pe22.nii.gz',
+             'familiar_mean_zstat': 'zstat20.nii.gz',
+             'unfamiliar_mean_zstat': 'zstat21.nii.gz',
+             'unfam>fam_mean_zstat': 'zstat22.nii.gz'
+             }
 
     # extract betas
     for cond in conds.keys():
-        extract_runs_famface_betas(base_dir, out_dir, mnimask,
-                                   outfilename='%s_mean_betas_%s.csv' % (cond, sub_id),
+        extract_runs_famface_betas(base_dir, out_dir, mnimask, anat_brain,
+                                   outfilename='%s_%s.csv' % (cond, sub_id),
                                    beta_filename=conds[cond])
