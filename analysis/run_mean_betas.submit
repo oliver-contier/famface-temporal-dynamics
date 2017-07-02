@@ -1,6 +1,8 @@
 Universe    = vanilla
 Executable  = run_mean_betas.sh
 Error       = run_mean_betas.error
+Log         = run_mean_betas.log
+Output      = run_mean_betas.out
 
 Arguments   = sub001
 Queue

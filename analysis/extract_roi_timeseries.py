@@ -22,7 +22,6 @@ def mask2bold(bold, anat, roi_mask, workdir,
     created by fsl. output is a nifti image.
     """
 
-
     from os.path import join
     import os
 
@@ -160,7 +159,6 @@ def extract_mean_3d(bold, mask):
     bold_cp_sample = bold_cp.samples[0]
 
     for roi_value in range(1, max(roi) + 1):
-
         # append mean of values in beta map that correspond to roi value index in roi mask
         roi_timeseries.append(np.mean(bold_cp_sample[roi == roi_value]))
     return roi_timeseries
@@ -210,7 +208,7 @@ def extract_runs_famface_betas(base_dir, out_dir, mnimask, outfilename, beta_fil
     betas = []
 
     # get run directories
-    runs = [i for i in sorted(os.listdir(base_dir))if i.startswith('_modelestimate')]
+    runs = [i for i in sorted(os.listdir(base_dir)) if i.startswith('_modelestimate')]
     runs += [runs.pop(2)]
 
     if not os.path.exists(out_dir):
@@ -247,7 +245,7 @@ def extract_runs_famface_betas(base_dir, out_dir, mnimask, outfilename, beta_fil
 
 if __name__ == '__main__':
     """
-    # For use with Tetrad (i.e. mask and data in standard space)
+    ### For use with Tetrad (i.e. mask and data in standard space) ###
 
     # get command line arguments
     import sys
@@ -267,6 +265,7 @@ if __name__ == '__main__':
 
     # pass sub0XX as argument to this script
     import sys
+
     sub_id = sys.argv[1]
 
     # point to path on hydra
@@ -280,7 +279,12 @@ if __name__ == '__main__':
               'model001/task001/subjects_all/stats/contrast__l1-03-l2-02/' \
               'zstat1_reversed_index.nii.gz'
 
-    # extract betas for familiar faces
-    extract_runs_famface_betas(base_dir, out_dir, mnimask,
-                               outfilename='mean_betas_%s.csv' % sub_id,
-                               beta_filename='pe20.nii.gz')
+    # dict with conditions and pe images to extract
+    conds = {'familiar': 'pe20.nii.gz',
+             'unfamiliar': 'pe21.nii.gz'}
+
+    # extract betas
+    for cond in conds.keys():
+        extract_runs_famface_betas(base_dir, out_dir, mnimask,
+                                   outfilename='%s_mean_betas_%s.csv' % (cond, sub_id),
+                                   beta_filename=conds[cond])
