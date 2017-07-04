@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
 from mvpa2.datasets.mri import fmri_dataset
-from nipype.interfaces import fsl
+from nipype.interfaces import fsl, ants
 from nipype.interfaces.fsl.utils import ConvertXFM
+from nipype.interfaces.c3 import C3dAffineTool
 import numpy as np
 import csv
 import os
@@ -142,10 +143,85 @@ def mask2pe(pe, anat, mnimask, workdir,
     return outfile
 
 
+trans_list = [
+    # pe2anat
+    '/data/famface/openfmri/oli/simulation/nobackup_l1ants_fwhm6_hp60_derivs_frac0.1_workdir/'
+    'openfmri/registration/_model_id_1_subject_id_sub001_task_id_1/convert2itk/affine.txt',
+
+    # anat2mni
+    '/data/famface/openfmri/oli/simulation/nobackup_l1ants_fwhm6_hp60_derivs_frac0.1_workdir/'
+    'openfmri/registration/_model_id_1_subject_id_sub001_task_id_1/antsRegister/output_InvertComposite.h5'
+]
+
+
+def mask2pe_ants(mnimask, anat, pe, mni2anat_hd5, affine_matrix, workdir,
+                 standard='/usr/share/fsl/5.0/data/standard/MNI152_T1_2mm_brain.nii.gz'):
+    """
+    Apply Transformation Matrices with Ants and FSL
+    """
+
+    from nipype.interfaces import ants
+
+    """
+    paths for temporary files and output file
+    """
+
+    # temporary nifti file
+    mni2anat_out_name = join(workdir, 'mnimask2anat.nii.gz')
+    # inverse affine transform
+    affine_matrix_inverse = join(workdir, 'anat2pe.txt')
+    # path to output file
+    outfile = join(workdir, 'mask2pe.nii.gz')
+
+    """
+    Invert affine and apply both transforms
+    """
+
+    # invert affine transmatrix (output from glm analysis)
+    inverse = ConvertXFM(
+        in_file=affine_matrix,
+        out_file=affine_matrix_inverse,
+        invert_xfm=True)
+    inverse.run()
+
+    # apply inverse transform from mni to anat space
+    # (output from glm analysis)
+    mni2anat = ants.ApplyTransforms(
+        input_image=mnimask,
+        reference_image=anat,
+        output_image=mni2anat_out_name,
+        transforms=[mni2anat_hd5],
+        dimension=3, interpolation='NearestNeighbor',
+        terminal_output='file')
+    mni2anat.run()
+
+    # apply inverse affine transform from anat to pe estimate space
+    mni2pe = fsl.FLIRT(
+        interp='nearestneighbour',
+        apply_xfm=True,
+        in_matrix_file=affine_matrix_inverse,
+        in_file=mni2anat_out_name,
+        reference=pe,
+        out_file=outfile)
+    mni2pe.run()
+
+    # return path to projected mask
+    return outfile
+
+
+"""
+# requires nifti file containing the deformation info
+mni2pe = ants.WarpImageMultiTransform(input_image=standard, # try out with standard image
+                                          transformation_series=['some.nii.gz', 'someaffine.txt']
+                                          )
+mni2pe.run()
+"""
+
+
 def extract_mean_timeseries(bold, mask):
     """
     extract mean time series of rois given pymvpa datasets
-    for a mask and a bold time-series
+    for a mask and a bold time-series.
     """
 
     roi_timeseries = []
@@ -156,7 +232,7 @@ def extract_mean_timeseries(bold, mask):
     # make a copy of bold dataset for safety
     bold_cp = bold.copy()
 
-    for roi_value in range(1, max(roi) + 1):
+    for roi_value in range(1, int(max(roi)) + 1):
         roi_timeseries.append(
             [np.mean(sample[roi == roi_value]) for sample in bold_cp.samples]
         )
@@ -168,19 +244,22 @@ def extract_mean_3d(bold, mask):
     """
     extract mean value of rois given pymvpa datasets
     for a mask and a 3D map. the 3D map could be a statistical map with
-    parameter  or contrast estimates.
+    parameter or contrast estimates.
     """
 
     roi_timeseries = []
 
     # select first sample of mask dataset
+    assert len(mask) == 1
     roi = mask.samples[0]
+
     # make a copy of bold dataset for safety
+    assert len(bold) == 1
     bold_cp = bold.copy()
 
     bold_cp_sample = bold_cp.samples[0]
 
-    for roi_value in range(1, max(roi) + 1):
+    for roi_value in range(1, int(max(roi)) + 1):
         # append mean of values in beta map that correspond to roi value index in roi mask
         roi_timeseries.append(np.mean(bold_cp_sample[roi == roi_value]))
     return roi_timeseries
@@ -188,7 +267,8 @@ def extract_mean_3d(bold, mask):
 
 def transpose_and_write(roi_timeseries, outfile):
     """
-    Write roi_timeseries to csv file (with roi-indices as header).
+    Write roi_timeseries to csv file (with roi-indices as header) with rois as
+    columns and time points as rows.
     For use in TETRAD.
     """
     transposed = map(list, zip(*roi_timeseries))
@@ -219,45 +299,62 @@ def extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id):
         print('run {} extracted!'.format(run))
 
 
-def extract_runs_famface_betas(base_dir, out_dir, mnimask, anat, outfilename, beta_filename):
+def extract_runs_famface_betas(base_dir, out_dir, mnimask, anat, subdir_template, outfilename, beta_filename):
     """
-    Project the mni mask into subject space for each run. Extract the mean
-    z-value value for familiar and unfamiliar faces within each roi.
+    Project the mni mask into subject space. Extract the mean
+    parameter estimate (zstat, pe, cope, varcope) for each roi and run.
 
-    For all runs of one subject (submit multiple subjects in parallel via PBS).
+    For all runs of one subject (submit multiple subjects in parallel via PBS/Condor).
     """
 
+    # this list will later be written to a csv file.
     betas = []
 
-    # get run directories
-    runs = [i for i in sorted(os.listdir(base_dir)) if i.startswith('_modelestimate')]
-    runs += [runs.pop(2)]
+    # list of directory names for each run
+    runs = ['_modelestimate%d' % i for i in range(11)]
 
+    # create output directory
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
-    # workdir = join(out_dir, 'workdir', 'run_%d' % runs.index(run))
-    # if not os.path.exists(workdir):
-    #    os.makedirs(workdir)
+    """
+    project mask into subject space
+    """
+
+    # create workdir to save transform files
+    workdir = join(out_dir, 'masktrans')
+    if not os.path.exists(workdir):
+        os.makedirs(workdir)
+
+    # path to hd5 file and affine transformation matrix
+    mni2anat_hd5 = join(base_dir, 'registration', subdir_template, 'antsRegister', 'output_InverseComposite.h5')
+    affine_matrix = join(base_dir, 'registration', subdir_template, 'mean2anatbbr', 'median_flirt.mat')
 
     # pick first stats map as template for co-registration.
-    stats_map_template = join(base_dir, '_modelestimate0', 'results', beta_filename)
+    pe_template = join(base_dir, 'modelestimate', subdir_template, 'modelestimate',
+                              'mapflow', '_modelestimate0', 'results', beta_filename)
 
-    # project mask into subject space, store in workdir, store path in variable
-    mask_subspace_path = mask2pe(stats_map_template, anat, mnimask, out_dir)
+    # do transformation, load result in pymvpa
+    mask_subspace_path = mask2pe_ants(mnimask, anat, pe_template, mni2anat_hd5, affine_matrix, workdir)
+    ms = fmri_dataset(mask_subspace_path)
+
+    """
+    extract mean parameter estimate for each run
+    """
 
     for run in runs:
-        # get paths for beta files for familiar and unfamiliar
-        stats_map_fam = join(base_dir, run, 'results', beta_filename)
+        # get paths for beta files (or any statistical map really)
+        pe_file = join(base_dir, 'modelestimate', subdir_template, 'modelestimate',
+                             'mapflow', run, 'results', beta_filename)
 
-        # load mask and stats map in pymvpa
-        ms = fmri_dataset(mask_subspace_path)
-        stats_map = fmri_dataset(stats_map_fam)
+        # load stats map in pymvpa
+        stats_map = fmri_dataset(pe_file)
 
-        # get betas
+        # extract mean parameter estimates
         run_betas = extract_mean_3d(stats_map, ms)
         betas.append(run_betas)
 
+    # write to a csv file
     outfile_fullpath = join(out_dir, outfilename)
     with open(outfile_fullpath, 'wb') as f:
         writer = csv.writer(f)
@@ -281,41 +378,42 @@ if __name__ == '__main__':
     extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id)
     """
 
-    """
-    For extracting mean betas on discovery
-    """
-
     # pass sub_id as argument to this script
     import sys
 
     sub_id = sys.argv[1]
 
     # path to base directory (working directory from nipype 1st lvl analysis)
-    base_dir = '/data/famface/openfmri/oli/results/extract_betas/l1_workdir_betas/' \
-               '_model_id_1_subject_id_%s_task_id_1/modelestimate/mapflow/' % sub_id
+    base_dir = '/data/famface/openfmri/oli/results/extract_betas/l1_workdir_betas/'
 
     out_dir = '/data/famface/openfmri/oli/results/extract_betas/outdir/%s' % sub_id
 
-    # path to mask image
+    # path to mask image (here, negative slope of familiar vs. unfamiliar as result from group lvl analysis)
     mnimask = '/data/famface/openfmri/oli/results/results_with_main_effects/l2ants_fwhm6_hp60_derivs_frac0.1/' \
               'model001/task001/subjects_all/stats/contrast__l1-03-l2-02/' \
               'zstat1_reversed_index.nii.gz'
 
+    # make this part of the path names a variable. for ease of use and aesthetics (since it repeats a lot).
+    subdir_template = '_model_id_1_subject_id_%s_task_id_1' % sub_id
+
     # path to brain extracted anatomical image
-    anat_brain = '/data/famface/openfmri/oli/simulation/nobackup_l1ants_fwhm6_hp60_derivs_frac0.1_workdir/' \
-                 'openfmri/registration/_model_id_1_subject_id_%s_task_id_1/stripper/highres001_brain.nii.gz' % sub_id
+    anat_brain = join(base_dir, 'registration', subdir_template, 'stripper', 'highres001_brain.nii.gz')
 
-    # dict with conditions and pe images to extract
-    conds = {'familiar_mean_betas': 'pe20.nii.gz',
-             'unfamiliar_mean_betas': 'pe21.nii.gz',
-             'fam>unfam_mean_betas': 'pe22.nii.gz',
-             'familiar_mean_zstat': 'zstat20.nii.gz',
-             'unfamiliar_mean_zstat': 'zstat21.nii.gz',
-             'unfam>fam_mean_zstat': 'zstat22.nii.gz'
-             }
+    # iterate over different kinds of parameter estimates
+    for stats in ['pe', 'zstat', 'cope', 'varcope']:
 
-    # extract betas
-    for cond in conds.keys():
-        extract_runs_famface_betas(base_dir, out_dir, mnimask, anat_brain,
-                                   outfilename='%s_%s.csv' % (cond, sub_id),
-                                   beta_filename=conds[cond])
+        # dict with regressors and contrasts to extract
+        conds = {
+            # simple regressors
+            'familiar_mean_%s' % stats: '%s20.nii.gz' % stats,
+            'unfamiliar_mean_%s' % stats: '%s21.nii.gz' % stats,
+            # contrasts
+            'famvsunfam_mean_%s' % stats: '%s22.nii.gz' % stats,
+            'unfamvsfam_mean_%s' % stats: '%s23.nii.gz' % stats,
+        }
+
+        # extract betas
+        for cond in conds.keys():
+            extract_runs_famface_betas(base_dir, out_dir, mnimask, anat_brain, subdir_template,
+                                       outfilename='%s_%s.csv' % (cond, sub_id),
+                                       beta_filename=conds[cond])
