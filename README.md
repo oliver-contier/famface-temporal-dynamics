@@ -1,10 +1,10 @@
-#Synopsis
+# Synopsis
 
 Analysis scripts for the project *temporal dynamics of familiar face recognition* by Oliver Contier, Matteo Visconti di Oleggio Castello, M. Ida Gobbini and Yaroslav O. Halchenko. 
 
-#Functionalities
+# Functionalities
 
-##simulation
+## simulation
 
 Contains scripts used to simulate data for validation of the pipeline.
 
@@ -13,7 +13,7 @@ Contains scripts used to simulate data for validation of the pipeline.
 - *run_simulation.sh*: Runs the main script with. flexible input argument (reflecting the individual subjects) to allow for splitting into jobs and effective use of HPC condor.
 - *famface_simulation.submit*: Submission file for HPC Condor.
 
-###glm
+### glm
 Contains scripts to execute our analysis pipeline on the simulated data. These scripts are essentially identical to the ones used for our main analysis, with the exception of input/output specification.
 
 - *simulation_fmri_ants_openfmri.py*: 1st and 2nd level analysis pipeline implemented with nipype.
