@@ -32,14 +32,14 @@ def pe2mni_ants(pe, mni2anat_hd5, affine_matrix, workdir,
 
     # apply both affine and non-linear transform to parameter estimate file
     # TODO: Not sure about the order in which ANTS wants these transformation files ...
-    mni2anat = ants.ApplyTransforms(
+    pe2mni = ants.ApplyTransforms(
         input_image=pe,
         reference_image=standard,
         output_image=outfile,
         transforms=[mni2anat_hd5, affine_matrix],
-        dimension=3, interpolation='Linear',
+        default_value=0, dimension=3, interpolation='Linear',
         terminal_output='file')
-    mni2anat.run()
+    pe2mni.run()
 
     # return path to resulting image
     return outfile
@@ -98,7 +98,7 @@ def extract_runs_famface_betas(base_dir, out_dir, mnimask, subdir_template, outf
 
     # path to hd5 file and affine transformation matrix
     mni2anat_hd5 = join(base_dir, 'registration', subdir_template, 'antsRegister', 'output_Composite.h5')
-    affine_matrix = join(base_dir, 'registration', subdir_template, 'mean2anatbbr', 'median_flirt.mat')
+    affine_matrix = join(base_dir, 'registration', subdir_template, 'convert2itk', 'affine.txt')
 
     """
     extract mean parameter estimate for each run
