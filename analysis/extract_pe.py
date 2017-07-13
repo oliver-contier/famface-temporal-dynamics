@@ -189,6 +189,34 @@ def mask2pe_ants(mnimask, anat, pe, mni2anat_hd5, affine_matrix, workdir):
     return outfile
 
 
+def pe2mni_ants(pe, mni2anat_hd5, affine_matrix, workdir,
+                standard='/usr/share/fsl/5.0/data/standard/MNI152_T1_2mm_brain.nii.gz'):
+    """
+    Transform a 3D statistical image to MNI space with ANTS given pre-existing transformation
+    matrices (in our case, from GLM/nipype working directory).
+
+    This is very much mimicking the behavior of the 'warpall' node in our analysis
+    pipeline.
+    """
+
+    # path to output file
+    outfile = join(workdir, 'pe2mni.nii.gz')
+
+    # apply both affine and non-linear transform to parameter estimate file
+    # TODO: Not sure about the order in which ANTS wants these transformation files ...
+    mni2anat = ants.ApplyTransforms(
+        input_image=pe,
+        reference_image=standard,
+        output_image=outfile,
+        transforms=[mni2anat_hd5, affine_matrix],
+        dimension=3, interpolation='Linear',
+        terminal_output='file')
+    mni2anat.run()
+
+    # return path to resulting image
+    return outfile
+
+
 def extract_mean_timeseries(bold, mask):
     """
     extract mean time series of rois given pymvpa datasets
@@ -348,7 +376,7 @@ if __name__ == '__main__':
     extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id)
     """
 
-    # pass sub_id as argument to this script
+    # pass arguments to this script
     import sys
 
     sub_id = sys.argv[1]

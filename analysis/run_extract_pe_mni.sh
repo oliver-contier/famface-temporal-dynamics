@@ -8,8 +8,8 @@
 # source fsl
 source /etc/fsl/fsl.sh
 
-python extract_pe.py $1 \
-    /data/famface/openfmri/oli/results/extract_betas/results/outdir_rois \
+python extract_pe.py_mni $1 \
+    /data/famface/openfmri/oli/results/extract_betas/results_pe2mni/outdir_rois \
     /data/famface/openfmri/oli/results/extract_betas/newrois_nooverlap_plusmatteos.nii.gz
 
 
