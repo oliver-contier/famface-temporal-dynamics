@@ -21,6 +21,7 @@ def concat(base_dir):
         files = [join(base_dir, run, '%s_%s.csv' % (sub, run)) for run in runs]
         df_list = [pd.read_csv(f) for f in files]
         full_df = pd.concat(df_list)
+        full_df.reset_index(inplace=True, drop=True)
         outfilename = '%s.csv' % sub
 
         if not os.path.exists(join(base_dir, 'concatinated', outfilename)):
