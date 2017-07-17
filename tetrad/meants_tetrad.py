@@ -68,28 +68,41 @@ def transpose_and_write(roi_timeseries, outfile, header):
 def extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id,
                                  labelcsv='/data/famface/openfmri/github/notebooks/roi_coord.csv'):
     """
-    Calls extract_timeseries() for ALL runs of ONE subject.
+    Given our famface data, extract time series for ALL runs of ONE subject.
     For use in TETRAD. base_dir contains pre-processed BOLD images in mni space.
     """
 
-    subdir = os.path.join(base_dir, sub_id, 'bold')
-    rundirs = os.listdir(subdir)
+#    subdir = os.path.join(base_dir, sub_id, 'bold')
+#    rundirs = os.listdir(subdir)
 
+    runs = ['run%03d' % i for i in xrange(1, 12)]
+
+    # enumerated label names from csv file
     labels = getlabels(labelcsv)
-    header = [pair[1] for pair in labels]
+
+    # select label names and strip whitespaces for header
+    # (because tetrad doesn't allow whitespaces)
+    header = [pair[1].replace(' ', '') for pair in labels]
+
     # load mask in pymvpa
     ms = fmri_dataset(mnimask)
 
-    for run in rundirs:
-        infile = os.path.join(base_dir, sub_id, 'bold', run, 'bold_mni.nii.gz')
+    for run in runs:
+
+        # create output dir
+        if not os.path.exists(join(out_dir, 'csv', run)):
+            os.makedirs(join(out_dir, 'csv', run))
+
+        infile = join(base_dir, sub_id, 'bold', run, 'bold_mni.nii.gz')
+
         # load bold file in pymvpa
         bold = fmri_dataset(infile)
-        if not os.path.exists(os.path.join(out_dir, 'csv')):
-            os.makedirs(os.path.join(out_dir, 'csv'))
-        outfile = os.path.join(out_dir, 'csv', '{}_{}.csv'.format(sub_id, run))
+
         # extract time series
         timeseries = extract_mean_timeseries(bold, ms)
+
         # write to csv
+        outfile = join(out_dir, 'csv', run, '{}_{}.csv'.format(sub_id, run))
         transpose_and_write(timeseries, outfile, header)
 
 
