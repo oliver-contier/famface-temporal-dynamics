@@ -24,7 +24,8 @@ def concat(base_dir):
         outfilename = '%s.csv' % sub
 
         if not os.path.exists(join(base_dir, 'concatinated', outfilename)):
-            full_df.to_csv(join(base_dir, 'concatinated', outfilename))
+            full_df.to_csv(join(base_dir, 'concatinated', outfilename),
+                           index_label='idx')
             print('successfully written out file for %s' % sub)
         else:
             print('%s already exists and was not overwritten' % outfilename)
