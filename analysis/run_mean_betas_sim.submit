@@ -1,8 +1,8 @@
 Universe    = vanilla
-Executable  = run_extract_pe_mni.sh
-Error       = run_extract_pe_mni.error
-output      = run_extract_pe_mni.out
-log         = run_extract_pe_mni.log
+Executable  = run_mean_betas_sim.sh
+Error       = run_mean_betas_sim.error
+Log         = run_mean_betas_sim.log
+Output      = run_mean_betas_sim.out
 
 Arguments   = sub001
 Queue

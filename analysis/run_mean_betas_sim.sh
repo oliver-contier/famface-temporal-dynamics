@@ -8,10 +8,9 @@
 # source fsl
 source /etc/fsl/fsl.sh
 
-python extract_pe_mni.py $1 \
-    /data/famface/openfmri/oli/results/extract_betas/results_pe2mni/outdir_clusters \
-    /data/famface/openfmri/oli/results/results_with_main_effects/l2ants_fwhm6_hp60_derivs_frac0.1/model001/task001/subjects_all/stats/contrast__l1-03-l2-02/zstat1_reversed_index.nii.gz
-
+python extract_pe_sim.py $1 \
+    /data/famface/openfmri/oli/results/extract_betas/l1_workdir_betas_simulation/ \
+    /data/famface/openfmri/oli/results/extract_betas/results_sim/outdir_rois \
 
 # thresholded contrast for decrease in fam > unfam
 # /data/famface/openfmri/oli/results/results_with_main_effects/l2ants_fwhm6_hp60_derivs_frac0.1/model001/task001/subjects_all/stats/contrast__l1-03-l2-02/zstat1_reversed_index.nii.gz

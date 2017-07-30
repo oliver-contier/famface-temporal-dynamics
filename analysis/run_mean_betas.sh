@@ -9,8 +9,9 @@
 source /etc/fsl/fsl.sh
 
 python extract_pe.py $1 \
-    /data/famface/openfmri/oli/results/extract_betas/results/outdir_rois \
-    /data/famface/openfmri/oli/results/extract_betas/newrois_nooverlap_plusmatteos.nii.gz
+    /data/famface/openfmri/oli/results/extract_betas/l1_workdir_betas/ \
+    /data/famface/openfmri/oli/results/extract_betas/results/outdir_clusters \
+    /data/famface/openfmri/oli/results/results_with_main_effects/l2ants_fwhm6_hp60_derivs_frac0.1/model001/task001/subjects_all/stats/contrast__l1-03-l2-02/zstat1_reversed_index.nii.gz
 
 
 # thresholded contrast for decrease in fam > unfam

@@ -180,6 +180,10 @@ def mask2pe_ants(mnimask, anat, pe, mni2anat_hd5, affine_matrix, workdir):
         interp='nearestneighbour',
         apply_xfm=True,
         in_matrix_file=affine_matrix_inverse,
+        out_matrix_file=join(workdir, 'anat2pe_flirt.mat'),
+        # the above output matrix is redundant. But if we don't specify,
+        # it just gets stored next to the script (and overwritten when
+        # iterating over subjects!). We want it tidy.
         in_file=mni2anat_out_name,
         reference=pe,
         out_file=outfile)
@@ -264,6 +268,19 @@ def extract_mean_3d(bold, mask):
     return roi_timeseries
 
 
+def getlabels(csvpath):
+    """
+    get labels from a csv file listing them (in our case, Matteo's list of rois)
+    """
+    with open(csvpath, 'r') as f:
+        rdr = csv.reader(f)
+        content = [row for row in rdr]
+
+    labelnames = [row[0] for row in content[1:]]
+    labels = [(idx, l) for (idx, l) in enumerate(labelnames, 1)]
+    return labels
+
+
 def transpose_and_write(roi_timeseries, outfile):
     """
     Write roi_timeseries to csv file (with roi-indices as header) with rois as
@@ -271,6 +288,7 @@ def transpose_and_write(roi_timeseries, outfile):
     For use in TETRAD.
     """
     transposed = map(list, zip(*roi_timeseries))
+    # give it a header
     transposed.insert(0, range(1, len(roi_timeseries) + 1))
 
     with open(outfile, 'w') as f:
@@ -361,30 +379,17 @@ def extract_runs_famface_betas(base_dir, out_dir, mnimask, anat, subdir_template
 
 
 if __name__ == '__main__':
-    """
-    ### For use with Tetrad (i.e. mask and data in standard space) ###
-
-    # get command line arguments
-    import sys
-
-    sub_id = sys.argv[1]
-    mnimask = sys.argv[2]
-    base_dir = sys.argv[3]
-    out_dir = sys.argv[4]
-
-    # run the function for famfaces
-    extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id)
-    """
 
     # pass arguments to this script
     import sys
 
     sub_id = sys.argv[1]
-    out_base_dir = sys.argv[2]
-    mnimask = sys.argv[3]
+    base_dir = sys.argv[2]
+    out_base_dir = sys.argv[3]
+    mnimask = sys.argv[4]
 
     # path to base directory (working directory from nipype 1st lvl analysis)
-    base_dir = '/data/famface/openfmri/oli/results/extract_betas/l1_workdir_betas/'
+    #base_dir = '/data/famface/openfmri/oli/results/extract_betas/l1_workdir_betas/'
 
     # create one output directory for each subject
     out_dir = join(out_base_dir, sub_id)
