@@ -28,7 +28,7 @@ dPreCun - R,6,-64,50
 mPreCun - L,-10,-56,34
 mPreCun - R,4,-66,32
 vPreCun - L,-8,-54,20
-vPreCun - R,8,-54,22abbreviation,x,y,z
+vPreCun - R,8,-54,22
 pCG,0.0,-42.0,26.0
 paraCG,0.0,-26.0,32.0
 aCG,-4.0,-8.0,32.0
