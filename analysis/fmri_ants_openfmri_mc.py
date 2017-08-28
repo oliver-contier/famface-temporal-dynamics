@@ -45,6 +45,7 @@ import nipype.interfaces.freesurfer as fs
 
 # import our custom 2nd lvl workflow
 from run_flow import create_run_flow
+import numpy as np
 
 version = 0
 if fsl.Info.version() and \
@@ -95,6 +96,61 @@ def median(in_files):
     filename = os.path.join(os.getcwd(), 'median.nii.gz')
     median_img.to_filename(filename)
     return filename
+
+
+# OC: declared this function outside of workflow to make it standalone
+# aparently this is required if it is to be used as an interface
+
+
+def build_filter1(motion_params, comp_norm, outliers, detrend_poly=None):
+    """Builds a regressor set comparison motion parameters, composite norm and
+    outliers. The outliers are added as a single time point column for each outlier
+
+    Parameters
+    ----------
+    motion_params: a text file containing motion parameters and its derivatives
+    comp_norm: a text file containing the composite norm
+    outliers: a text file containing 0-based outlier indices
+    detrend_poly: number of polynomials to add to detrend
+
+    Returns
+    -------
+    components_file: a text file containing all the regressors
+    """
+    import numpy as np
+    import nibabel as nb
+    from scipy.special import legendre
+
+    # TODO: debugging
+    #import pdb;pdb.set_trace()
+
+
+    out_files = []
+    for idx, filename in enumerate(filename_to_list(motion_params)):
+        params = np.genfromtxt(filename)
+        norm_val = np.genfromtxt(filename_to_list(comp_norm)[idx])
+        out_params = np.hstack((params, norm_val[:, None]))
+        try:
+            outlier_val = np.genfromtxt(filename_to_list(outliers)[idx])
+        except IOError:
+            outlier_val = np.empty((0))
+        for index in np.atleast_1d(outlier_val):
+            outlier_vector = np.zeros((out_params.shape[0], 1))
+            assert int(index) == index
+            outlier_vector[int(index)] = 1
+            out_params = np.hstack((out_params, outlier_vector))
+        if detrend_poly:
+            timepoints = out_params.shape[0]
+            X = np.empty((timepoints, 0))
+            for i in range(detrend_poly):
+                X = np.hstack((X, legendre(
+                    i + 1)(np.linspace(-1, 1, timepoints))[:, None]))
+            out_params = np.hstack((out_params, X))
+        filename = os.path.join(os.getcwd(), "filter_regressor%02d.txt" % idx)
+        np.savetxt(filename, out_params, fmt="%.10f")
+        out_files.append(filename)
+    return out_files
+
 
 
 def create_reg_workflow(name='registration'):
@@ -1090,53 +1146,6 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     wf.connect(registration, 'inputspec.target_image', slicer_bold, 'in_file')
     wf.connect(registration, 'outputspec.transformed_mean', slicer_bold, 'image_edges')
 
-    """
-    Get additional regressors from noise estimate -- code from nipype example
-    rsfmri_vol_surface_preprocessing.py
-    """
-
-    def build_filter1(motion_params, comp_norm, outliers, detrend_poly=None):
-        """Builds a regressor set comprisong motion parameters, composite norm and
-        outliers. The outliers are added as a single time point column for each outlier
-
-        Parameters
-        ----------
-        motion_params: a text file containing motion parameters and its derivatives
-        comp_norm: a text file containing the composite norm
-        outliers: a text file containing 0-based outlier indices
-        detrend_poly: number of polynomials to add to detrend
-
-        Returns
-        -------
-        components_file: a text file containing all the regressors
-        """
-        import numpy as np
-        import nibabel as nb
-        from scipy.special import legendre
-        out_files = []
-        for idx, filename in enumerate(filename_to_list(motion_params)):
-            params = np.genfromtxt(filename)
-            norm_val = np.genfromtxt(filename_to_list(comp_norm)[idx])
-            out_params = np.hstack((params, norm_val[:, None]))
-            try:
-                outlier_val = np.genfromtxt(filename_to_list(outliers)[idx])
-            except IOError:
-                outlier_val = np.empty((0))
-            for index in np.atleast_1d(outlier_val):
-                outlier_vector = np.zeros((out_params.shape[0], 1))
-                outlier_vector[index] = 1
-                out_params = np.hstack((out_params, outlier_vector))
-            if detrend_poly:
-                timepoints = out_params.shape[0]
-                X = np.empty((timepoints, 0))
-                for i in range(detrend_poly):
-                    X = np.hstack((X, legendre(
-                        i + 1)(np.linspace(-1, 1, timepoints))[:, None]))
-                out_params = np.hstack((out_params, X))
-            filename = os.path.join(os.getcwd(), "filter_regressor%02d.txt" % idx)
-            np.savetxt(filename, out_params, fmt="%.10f")
-            out_files.append(filename)
-        return out_files
 
     def extract_noise_components(realigned_file, mask_file, num_components=5,
                                  extra_regressors=None):
@@ -1201,6 +1210,11 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
             else:
                 out_files.append(name + suffix + ext)
         return list_to_filename(out_files)
+
+    """
+    Get additional regressors from noise estimate -- code from nipype example
+    rsfmri_vol_surface_preprocessing.py
+    """
 
     createfilter1 = Node(Function(input_names=['motion_params', 'comp_norm',
                                                'outliers', 'detrend_poly'],
