@@ -869,25 +869,49 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
                                          function=check_behav_list),
                             name='reshape_behav')
 
+    # for testing purposes
+    #  with open('session_info.pickle', 'rb') as handle:
+    #     session_info = pickle.load(handle)
+
     def remove_conds(session_info):
-        """remove all regressors that are not nuisance from session_info"""
+        """remove all regressors that are not nuisance from session_info.
+
+        session_info : list of dicts representing functional runs. Each run dict
+        contains one dict for each experimental condition in the key 'conds'.
+
+        keepcond : list of condition names to keep.
+
+        in our case, 'cond010' corresponds to participant's button press.
+        """
         # session_info is a list of 11 elements, each element representing one functional run
         # the keys of each run dict are regress, cond, hpf, scans
         # hpf is a single float value (60.0) and 'scans' is a string file name of a nifti
-        # the key 'cond' seems to contain our experimental conditions (each as its own dict in a list)
+        # the key 'cond' contains our experimental conditions (each as its own dict in a list)
+        # each of which has keys for name, onset, amplitudes, duration
         # value of 'regress' is a list of dicts (each has keys 'name', and 'val')
         # names are Realign1, ... Realign6 --> motion correction parameters. For some runs, there's also Outlier1...
 
+        # just to be safe
         import copy
         nuisance_info = copy.deepcopy(session_info)
+
+        keepconds=['cond010']
+
+        if not keepconds:
+            keepconds = []
+
         for run in nuisance_info:
-            run['cond'] = []
+            run['cond'] = [condition for condition in run['cond']
+                           if condition['name'] in keepconds]
         return nuisance_info
 
     removeconds = pe.Node(Function(input_names='session_info',
                                    output_names='nuisance_info',
                                    function=remove_conds),
                           name='removeconds')
+
+    # keep cond010 (button press)
+    #removeconds.inputs.keepconds = ['cond010']
 
     wf.connect(subjinfo, 'TR', modelspec, 'time_repetition')
     wf.connect(datasource, 'behav', reshape_behav, 'behav')
@@ -914,7 +938,7 @@ def analyze_openfmri_dataset(data_dir, subject=None, model_id=None,
     wf.connect(registration, 'inputspec.target_image', reslice_bold, 'inputspec.target_image')
 
     wf.connect([(preproc, art, [('outputspec.motion_parameters',
-                                 'realignment_parameters'),
+                                'realignment_parameters'),
                                 ('outputspec.realigned_files',
                                  'realigned_files'),
                                 ('outputspec.mask', 'mask_file')]),
