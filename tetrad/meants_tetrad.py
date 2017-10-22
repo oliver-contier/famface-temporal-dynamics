@@ -88,20 +88,49 @@ def extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id,
     ms = fmri_dataset(mnimask)
 
     for run in runs:
+        # create output dir
+        if not os.path.exists(join(out_dir, 'csv', run)):
+            os.makedirs(join(out_dir, 'csv', run))
+        infile = join(base_dir, sub_id, 'bold', run, 'bold_mni.nii.gz')
+        # load bold file in pymvpa
+        bold = fmri_dataset(infile)
+        # extract time series
+        timeseries = extract_mean_timeseries(bold, ms)
+        # write to csv
+        outfile = join(out_dir, 'csv', run, '{}_{}.csv'.format(sub_id, run))
+        transpose_and_write(timeseries, outfile, header)
 
+
+def extract_runs_nuisancedata(base_dir, out_dir, mnimask, sub_id,
+                              labelcsv='/data/famface/openfmri/github/notebooks/roi_coord.csv'):
+    """
+    extract time series from the residuals of our nuisance model.
+    This does essentially the same as extract_runs_famface_mnimask, only
+    for different input path structure.
+    """
+    """
+    Given our famface data, extract time series for ALL runs of ONE subject.
+    For use in TETRAD. base_dir contains pre-processed BOLD images in mni space.
+    """
+
+    # enumerated label names from csv file
+    labels = getlabels(labelcsv)
+
+    # strip whitespaces for header
+    # (because tetrad doesn't allow whitespaces)
+    header = [pair[1].replace(' ', '') for pair in labels]
+
+    ms = fmri_dataset(mnimask)
+
+    runs = ['run%02d' % i for i in xrange(1, 12)]
+    for run in runs:
         # create output dir
         if not os.path.exists(join(out_dir, 'csv', run)):
             os.makedirs(join(out_dir, 'csv', run))
 
-        infile = join(base_dir, sub_id, 'bold', run, 'bold_mni.nii.gz')
-
-        # load bold file in pymvpa
+        infile = join(base_dir, sub_id, 'residual4d', 'mni', 'res4d_%s.nii.gz' % run)
         bold = fmri_dataset(infile)
-
-        # extract time series
         timeseries = extract_mean_timeseries(bold, ms)
-
-        # write to csv
         outfile = join(out_dir, 'csv', run, '{}_{}.csv'.format(sub_id, run))
         transpose_and_write(timeseries, outfile, header)
 
@@ -116,5 +145,10 @@ if __name__ == '__main__':
     base_dir = sys.argv[3]
     out_dir = sys.argv[4]
 
+    # choose execution fucntion based on run script arguments
+    if len(sys.argv) == 6 and sys.argv[-1] == 'residuals':
+        extract_runs_nuisancedata(base_dir, out_dir, mnimask, sub_id)
+    else:
+        extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id)
+
     # run the function for famfaces
-    extract_runs_famface_mnimask(base_dir, out_dir, mnimask, sub_id)
