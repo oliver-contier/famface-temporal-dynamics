@@ -1,0 +1,8 @@
+*.pyc
+*.png
+*.pickle
+*.error
+*.log
+*.out
+*.idea
+*.ipynb_checkpoints
