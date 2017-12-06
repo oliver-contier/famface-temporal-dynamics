@@ -1,26 +1,30 @@
 # Synopsis
 
-Analysis scripts for the project *temporal dynamics of familiar face recognition* by Oliver Contier, Matteo Visconti di Oleggio Castello, M. Ida Gobbini and Yaroslav O. Halchenko. 
+Analysis scripts for the project *temporal dynamics of familiar face recognition* by Oliver Contier, Matteo Visconti di Oleggio Castello, M. Ida Gobbini and Yaroslav O. Halchenko.
 
-# Functionalities
+This project is pre-registered on the Open Science Framework under [osf.io/f7dqp](https://osf.io/f7dqp/).
 
-## simulation
+# Structure
 
-Contains scripts used to simulate data for validation of the pipeline.
+## /simulation
+Contains scripts used to simulate data for a priori validation of the pipeline.
 
-- *famface_simulation_functions.py*: Underlying functions.
-- *famface_simulation_main.py*: Execution on our data set.
-- *run_simulation.sh*: Runs the main script with. flexible input argument (reflecting the individual subjects) to allow for splitting into jobs and effective use of HPC condor.
-- *famface_simulation.submit*: Submission file for HPC Condor.
+### /simulation/glm
+Contains scripts to perform the planned GLM analysis on the simulated data. These scripts are essentially identical to the ones used for our main analysis, with the exception of input/output specification.
 
-### glm
-Contains scripts to execute our analysis pipeline on the simulated data. These scripts are essentially identical to the ones used for our main analysis, with the exception of input/output specification.
+## /analysis
+Scripts to execute the GLM analysis on the actual data. Additionally, there are scripts to extract the mean parameter estimates for each run within certain ROIs.
 
-- *simulation_fmri_ants_openfmri.py*: 1st and 2nd level analysis pipeline implemented with nipype.
-- *run_flow.py*: Additional specification of 2nd level model.
-- *simulation_runl1*: Runs 1st and 2nd lvl pipeline.
-- *pbssubmit_simulation_runl1.pbs*: Submission script for PBS cluster computing for 1st and 2nd level analysis.
+## /tetrad
+These scripts extract mean time series from within the selected ROIs, which are then being used as input for an effective connectivity analysis with the IMaGES search algorithm (as implemented in the python package 'py-causal'). The results of this can be found in /notebooks/pycausal-analysis.ipynb.
 
-- *group_multregress_openfmri.py*: Group level analysis pipeline implemented with nipype. 
-- *simulation_runl2.sh*: Runs the group level analysis.
-- *pbssubmit_simulation_runl2.pbs*: Submission script for PBS cluster computing for group level analysis. 
+## /notebooks
+Different notebooks for visualization of results.
+
+- plot.results.ipynb : statistical maps resulting from GLM analysis.
+
+- activation_table.ipynb : activation table describing the found clusters.
+
+- plot_mean_betas.ipynb : several plots describing the progression of mean parameter estimates within ROIs across runs
+
+- pycausal_analysis.ipynb : Results of effective connectivity analysis using IMaGES as implemented in the 'py-causal' package.
