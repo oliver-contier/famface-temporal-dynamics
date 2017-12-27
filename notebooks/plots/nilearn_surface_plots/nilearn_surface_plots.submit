@@ -1,0 +1,7 @@
+Universe    = vanilla
+Executable  = nilearn_surface_plots.sh
+Error       = nilearn_surface_plots.error
+Log         = nilearn_surface_plots.log
+Output      = nilearn_surface_plots.out
+
+Queue
