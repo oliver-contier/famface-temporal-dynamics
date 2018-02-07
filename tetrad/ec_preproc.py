@@ -110,7 +110,7 @@ if __name__ == '__main__':
     for run_nr in range(1, 12):
         # I/O files
         bold_file = pjoin(results_basedir, 'sub%03d' % sub_nr, 'bold', 'run%03d' % run_nr, 'bold_mni.nii.gz')
-        out_file = pjoin(out_dir, 'res4d_%02d.nii.gz' % run_nr)
+        out_file = pjoin(out_dir, 'res4d_run%02d.nii.gz' % run_nr)
         # run preprocessing for given run and subject
         preproc_run(bold_file, out_file, qadir, run_nr)
         # report back to me
