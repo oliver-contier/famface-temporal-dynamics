@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+"""
+This script uses FSL's functionality to extract the eigenvariate of all ROIs in a mask image.
+In this process, the mask image is split to yield one mask image for each ROI.
+Those are saved in a specified working directory.
+"""
 
 from mvpa2.datasets.mri import map2nifti, fmri_dataset
 import os
@@ -76,22 +81,27 @@ def concat_rois(csvpath, outfile):
         with open(outfile, 'wb') as f:
             writer = csv.writer(f)
             writer.writerow(range(1, len(out) + 1))
-            for idx in range(len(out)):
+            for idx in range(len(np_temp)):
                 row = [element[idx] for element in out]
                 writer.writerow(row)
 
 
-def extract_eigenvariate_famfaces(datadir, workdir, sub, run):
+def extract_eigenvariate_famfaces(datadir, workdir, sub, run, mask_image,
+                                  ecpreproc=False):
     """
     execute split_mask, extract_eigenv_roi, and concat_rois
+    for given run of given subject.
     """
-
-    mask_image = '/data/famface/openfmri/scripts/notebooks/rois_manual_r5_20170222_nooverlap.nii.gz'
 
     # split mask
     maskfiles = split_mask(mask_image, workdir)
 
-    bold_image = os.path.join(datadir, sub, 'bold', run, 'bold_mni.nii.gz')
+    # path template is different for data preprocessed for EC analysis
+    if ecpreproc:
+        run_shortstring = run.replace('run0', 'run')
+        bold_image = os.path.join(datadir, sub, 'residual4d', 'mni', 'res4d_%s.nii.gz' % run_shortstring)
+    else:
+        bold_image = os.path.join(datadir, sub, 'bold', run, 'bold_mni.nii.gz')
 
     csvpath = os.path.join(workdir, 'csv', sub, run)
 
@@ -103,24 +113,46 @@ def extract_eigenvariate_famfaces(datadir, workdir, sub, run):
         extract_eigenv_roi(bold_image=bold_image, mask=mask,
                            csvpath=csvpath, sub=sub, run=run)
 
-    outfile_allrois = os.path.join(workdir, 'csv', sub, run, '{}_{}_all.csv'.format(sub, run))
-
     # concatinate all roi specific csvs into one csv
+    outfile_allrois = os.path.join(workdir, 'csv', sub, run, '{}_{}_all.csv'.format(sub, run))
     concat_rois(csvpath=csvpath, outfile=outfile_allrois)
 
+"""
+def source_fsl(fslpath='/etc/fsl/fsl.sh'):
+    """""""
+    Source FSL by wrapping the bash command in a tremendously complicated manner.
+    """"""
+    import os
+    import pprint
+    import subprocess
+    command = ['bash', '-c', 'source %s' % fslpath]
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE)
+    for line in proc.stdout:
+        (key, _, value) = line.partition("=")
+        os.environ[key] = value
+    proc.communicate()
+    pprint.pprint(dict(os.environ))
+"""
 
 if __name__ == '__main__':
-    # get sub0XX and  from argument to this script
-    import sys
 
+    # can't make this work, source from bash script and/or condor submission file
+    # source_fsl()
+
+    # get subjectID from command line argument
+    import sys
     subj = sys.argv[1]
 
     # preprocessed data set in mni space
-    dat = '/data/famface/openfmri/oli/results_with_main_effect/l1ants_fwhm6_hp60_derivs_frac0.1/model001/task001'
+    # dat = '/data/famface/openfmri/oli/results_with_main_effect/l1ants_fwhm6_hp60_derivs_frac0.1/model001/task001'
+    # specifically for EC preprocessed data
+    dat = '/data/famface/openfmri/oli/results/ec_preproc/'
 
     # working directory stores temporary csv files
-    work = os.path.join('/data', 'famface', 'openfmri', 'oli', 'results', 'extract_eigenv', 'workdir')
+    work = os.path.join('/data', 'famface', 'openfmri', 'oli', 'results', 'extract_eigenv_ecp', 'workdir')
+    # path to mask image
+    mask = '/data/famface/openfmri/scripts/notebooks/rois_manual_r5_20170222_nooverlap.nii.gz'
 
-    for run in ['run%03d' % i for i in range(1,12)]:
-
-        extract_eigenvariate_famfaces(dat, work, subj, run)
+    for run in ['run%03d' % i for i in range(1, 12)]:
+        extract_eigenvariate_famfaces(dat, work, subj, run, mask, ecpreproc=True)
+        print('finished %s %s' % (subj, run))
